@@ -1,0 +1,81 @@
+# Local stack for phase 1. One command starts everything:
+#   docker compose up -d --build --wait
+# Host ports are offset (5433, 6380) to avoid clashing with anything already installed.
+
+x-python-env: &python-env
+  PAYNEST_REGION: demo
+  DATABASE_URL: postgresql://paynest:paynest@postgres:5432/paynest
+  VALKEY_URL: redis://valkey:6379/0
+  SQS_ENDPOINT_URL: http://elasticmq:9324
+  SQS_QUEUE_NAME: tickets-in
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: paynest
+      POSTGRES_PASSWORD: paynest
+      POSTGRES_DB: paynest
+    ports: ["5433:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paynest"]
+      interval: 3s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      retries: 20
+
+  elasticmq:                    # local SQS: tickets-in + tickets-dlq
+    image: softwaremill/elasticmq-native
+    ports: ["9324:9324", "9325:9325"]   # 9325 = queue browser UI
+    volumes: ["./infra/local/elasticmq.conf:/opt/elasticmq.conf:ro"]
+
+  api:
+    build: .
+    # Migrations run first, so the API never starts against an old schema.
+    command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    environment: *python-env
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      valkey: {condition: service_healthy}
+      elasticmq: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      retries: 30
+
+  worker:
+    build: .
+    command: python -m worker.main
+    environment: *python-env
+    depends_on:
+      api: {condition: service_healthy}
+
+  mock-payroll-api:
+    build: .
+    command: uvicorn app:app --app-dir mock-payroll-api --host 0.0.0.0 --port 8081
+    ports: ["8081:8081"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 3s
+      retries: 20
+
+  web:
+    build: ./web
+    ports: ["3000:80"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      interval: 3s
+      retries: 20
+
+volumes:
+  pgdata: {}

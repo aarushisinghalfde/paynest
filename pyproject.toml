@@ -1,0 +1,19 @@
+[project]
+name = "paynest"
+version = "0.1.0"
+description = "Payce Support Assist"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["web", "migrations/versions", "scripts/phase0"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]

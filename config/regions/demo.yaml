@@ -1,0 +1,9 @@
+# The one region that is built and demonstrated: Sydney, the Agentic Core FDE
+# project's home region. Every tenant is routed here for the demo.
+name: demo
+aws_region: ap-southeast-2
+account_id: "665651551863"          # Agentic Core FDE
+serves_tenants_from: [ap-south-1, me-central-1]
+placeholder: false
+kms_key_alias: alias/paynest-demo   # created in phase 2
+guardrail_id: TODO                  # created in phase 9

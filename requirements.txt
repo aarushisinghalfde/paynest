@@ -1,0 +1,14 @@
+# Phase 1. Later phases add LangGraph, Presidio, embeddings and evaluation tools.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+boto3>=1.35
+psycopg[binary]>=3.2
+sqlalchemy>=2.0
+alembic>=1.13
+redis>=5.0              # Valkey speaks the Redis protocol
+pyyaml>=6.0
+python-dotenv>=1.0
+# tests and lint
+pytest>=8.0
+httpx>=0.27             # FastAPI TestClient
+ruff>=0.6

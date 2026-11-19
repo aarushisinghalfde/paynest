@@ -1,0 +1,18 @@
+# Model ladder (cheapest rung first). Phase 0 outcome: Bedrock model calls are on hold
+# for this account, so OpenRouter is the stand-in provider. The model client that reads
+# this file is built in phase 6; switching to Bedrock is the `provider` line.
+provider: openrouter
+
+providers:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    ladder:                          # check IDs and prices at openrouter.ai/models
+      - meta-llama/llama-3.1-8b-instruct
+      - google/gemini-2.5-flash
+  bedrock:
+    region: ap-southeast-2
+    ladder: []                       # fill in after re-running phase0_checks.py once AWS lifts the hold
+
+budget:
+  daily_usd_cap: 0.50

@@ -1,0 +1,7 @@
+# PLACEHOLDER: production home for UAE tenants. Kept in code, never applied.
+name: uae
+aws_region: me-central-1
+serves_tenants_from: [me-central-1]
+placeholder: true
+kms_key_alias: alias/paynest-uae    # TODO
+guardrail_id: TODO

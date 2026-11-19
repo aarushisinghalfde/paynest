@@ -1,0 +1,7 @@
+# PLACEHOLDER: production home for India tenants. Kept in code, never applied.
+name: india
+aws_region: ap-south-1
+serves_tenants_from: [ap-south-1]
+placeholder: true
+kms_key_alias: alias/paynest-india  # TODO
+guardrail_id: TODO

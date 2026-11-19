@@ -1,0 +1,733 @@
+{
+  "run_at": "2026-11-19T11:13:04+00:00",
+  "identity": {
+    "status": "PASS",
+    "account": "315549821836",
+    "arn": "arn:aws:sts::315549821836:assumed-role/AccountFullAccessRole/d4883488-9031-70a9-d5bf-75abaf4f163e"
+  },
+  "regions": {
+    "ap-south-1": {
+      "region_enabled": {
+        "status": "PASS",
+        "opt_in_status": "opt-in-not-required"
+      },
+      "text_discovery": {
+        "status": "PASS",
+        "families": {
+          "nova-micro": {
+            "listed": true,
+            "model_id": "amazon.nova-micro-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "apac.amazon.nova-micro-v1:0",
+                "name": "APAC Nova Micro",
+                "destination_regions": [
+                  "ap-northeast-1",
+                  "ap-northeast-2",
+                  "ap-northeast-3",
+                  "ap-south-1",
+                  "ap-southeast-1",
+                  "ap-southeast-2"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-lite": {
+            "listed": true,
+            "model_id": "amazon.nova-lite-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "apac.amazon.nova-lite-v1:0",
+                "name": "APAC Nova Lite",
+                "destination_regions": [
+                  "ap-northeast-1",
+                  "ap-northeast-2",
+                  "ap-northeast-3",
+                  "ap-south-1",
+                  "ap-southeast-1",
+                  "ap-southeast-2"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-2-lite": {
+            "listed": true,
+            "model_id": "amazon.nova-2-lite-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "global.amazon.nova-2-lite-v1:0",
+                "name": "GLOBAL Amazon Nova 2 Lite",
+                "destination_regions": [
+                  "ap-south-1"
+                ],
+                "stays_in_region": true
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-pro": {
+            "listed": true,
+            "model_id": "amazon.nova-pro-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "apac.amazon.nova-pro-v1:0",
+                "name": "APAC Nova Pro",
+                "destination_regions": [
+                  "ap-northeast-1",
+                  "ap-northeast-2",
+                  "ap-northeast-3",
+                  "ap-south-1",
+                  "ap-southeast-1",
+                  "ap-southeast-2"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "claude-haiku-4.5": {
+            "listed": true,
+            "model_id": "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "name": "Global Anthropic Claude Haiku 4.5",
+                "destination_regions": [
+                  "ap-south-1"
+                ],
+                "stays_in_region": true
+              },
+              {
+                "id": "in.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "name": "IN Anthropic Claude Haiku 4.5",
+                "destination_regions": [
+                  "ap-south-1",
+                  "ap-south-2"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          }
+        },
+        "profile_list_error": null
+      },
+      "embed_discovery": {
+        "status": "PASS",
+        "families": {
+          "titan-embed-v2": {
+            "listed": true,
+            "model_id": "amazon.titan-embed-text-v2:0",
+            "on_demand_in_region": true,
+            "profiles": [],
+            "inference_types": [
+              "ON_DEMAND"
+            ]
+          },
+          "cohere-embed-multilingual-v3": {
+            "listed": true,
+            "model_id": "cohere.embed-multilingual-v3",
+            "on_demand_in_region": true,
+            "profiles": [],
+            "inference_types": [
+              "ON_DEMAND"
+            ]
+          },
+          "cohere-embed-v4": {
+            "listed": true,
+            "model_id": "cohere.embed-v4:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "global.cohere.embed-v4:0",
+                "name": "Global Cohere Embed v4",
+                "destination_regions": [
+                  "ap-south-1"
+                ],
+                "stays_in_region": true
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          }
+        },
+        "profile_list_error": null
+      },
+      "text_invoke": {
+        "nova-micro": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile apac.amazon.nova-micro-v1:0",
+              "target": "apac.amazon.nova-micro-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-lite": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile apac.amazon.nova-lite-v1:0",
+              "target": "apac.amazon.nova-lite-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-2-lite": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile global.amazon.nova-2-lite-v1:0",
+              "target": "global.amazon.nova-2-lite-v1:0",
+              "stays_in_region": true,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-pro": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile apac.amazon.nova-pro-v1:0",
+              "target": "apac.amazon.nova-pro-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "claude-haiku-4.5": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile global.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "target": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "stays_in_region": true,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            },
+            {
+              "via": "profile in.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "target": "in.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        }
+      },
+      "embed_invoke": {
+        "titan-embed-v2": {
+          "via": "in-region model",
+          "target": "amazon.titan-embed-text-v2:0",
+          "stays_in_region": true,
+          "errors": {
+            "english": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hindi": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hinglish": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "arabic": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+          },
+          "status": "FAIL"
+        },
+        "cohere-embed-multilingual-v3": {
+          "via": "in-region model",
+          "target": "cohere.embed-multilingual-v3",
+          "stays_in_region": true,
+          "errors": {
+            "english": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hindi": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hinglish": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "arabic": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+          },
+          "status": "FAIL"
+        },
+        "cohere-embed-v4": {
+          "via": "profile global.cohere.embed-v4:0",
+          "target": "global.cohere.embed-v4:0",
+          "stays_in_region": true,
+          "errors": {
+            "english": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hindi": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "hinglish": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience.",
+            "arabic": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+          },
+          "status": "FAIL"
+        }
+      },
+      "guardrails": {
+        "guardrail_id": "nf5oka3tnz0y",
+        "kept": false,
+        "status": "PASS",
+        "pii": {
+          "english": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "Hi, my Aadhaar is {aadhaar} and PAN {pan}. Salary goes to IBAN {INTERNATIONAL_BANK_ACCOUNT_NUMBER}{iban_uae}. Email me at {EMAIL} or call {PHONE}. Emirates ID {emirates_id}."
+          },
+          "hindi": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "मेरा आधार नंबर {aadhaar} है और पैन {pan} है, कृपया पीएफ ठीक करें।"
+          },
+          "arabic": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "رقم الهوية الإماراتية {emirates_id} والآيبان {INTERNATIONAL_BANK_ACCOUNT_NUMBER}{iban_uae}، يرجى تحديث الراتب."
+          },
+          "devanagari_digits_expected_miss": {
+            "action": "NONE",
+            "masked_text": "आधार २३४५ ६७८९ ०१२४ है",
+            "caught": false
+          }
+        },
+        "injection": {
+          "injection_blocked": true,
+          "benign_passed": true
+        }
+      },
+      "ec2": {
+        "status": "PASS",
+        "t4g.small": true
+      },
+      "rds": {
+        "status": "PASS",
+        "default_postgres_version": "18.3",
+        "db.t4g.micro": true,
+        "note": "pgvector and pg_trgm are created in phase 2 (CREATE EXTENSION)"
+      },
+      "valkey": {
+        "status": "PASS",
+        "valkey_versions": [
+          "7.2",
+          "8.0",
+          "8.1",
+          "8.2",
+          "9.0",
+          "9.1"
+        ]
+      },
+      "sqs": {
+        "status": "PASS"
+      },
+      "kms": {
+        "status": "PASS"
+      },
+      "xray": {
+        "status": "PASS"
+      },
+      "decisions": {
+        "model_ladder": "DECIDE: no rung works in-region. Rungs that leave the region: none",
+        "starting_rung": "none until the ladder is decided",
+        "out_of_region_rungs": "none",
+        "embedding_model": "multilingual-e5 on the EC2 (no in-region Bedrock embedding passed)",
+        "guardrails": "works: all seeded IDs masked in EN/HI/AR, injection blocked, benign passed"
+      }
+    },
+    "eu-central-1": {
+      "region_enabled": {
+        "status": "PASS",
+        "opt_in_status": "opt-in-not-required"
+      },
+      "text_discovery": {
+        "status": "PASS",
+        "families": {
+          "nova-micro": {
+            "listed": true,
+            "model_id": "amazon.nova-micro-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "eu.amazon.nova-micro-v1:0",
+                "name": "EU Nova Micro",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-lite": {
+            "listed": true,
+            "model_id": "amazon.nova-lite-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "eu.amazon.nova-lite-v1:0",
+                "name": "EU Nova Lite",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-2-lite": {
+            "listed": true,
+            "model_id": "amazon.nova-2-lite-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "global.amazon.nova-2-lite-v1:0",
+                "name": "GLOBAL Amazon Nova 2 Lite",
+                "destination_regions": [
+                  "eu-central-1"
+                ],
+                "stays_in_region": true
+              },
+              {
+                "id": "eu.amazon.nova-2-lite-v1:0",
+                "name": "EU Amazon Nova 2 Lite",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-south-1",
+                  "eu-south-2",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "nova-pro": {
+            "listed": true,
+            "model_id": "amazon.nova-pro-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "eu.amazon.nova-pro-v1:0",
+                "name": "EU Nova Pro",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          },
+          "claude-haiku-4.5": {
+            "listed": true,
+            "model_id": "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "name": "EU Anthropic Claude Haiku 4.5",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-south-1",
+                  "eu-south-2",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              },
+              {
+                "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                "name": "Global Anthropic Claude Haiku 4.5",
+                "destination_regions": [
+                  "eu-central-1"
+                ],
+                "stays_in_region": true
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          }
+        },
+        "profile_list_error": null
+      },
+      "embed_discovery": {
+        "status": "PASS",
+        "families": {
+          "titan-embed-v2": {
+            "listed": true,
+            "model_id": "amazon.titan-embed-text-v2:0",
+            "on_demand_in_region": true,
+            "profiles": [],
+            "inference_types": [
+              "ON_DEMAND"
+            ]
+          },
+          "cohere-embed-multilingual-v3": {
+            "listed": true,
+            "model_id": "cohere.embed-multilingual-v3",
+            "on_demand_in_region": true,
+            "profiles": [],
+            "inference_types": [
+              "ON_DEMAND"
+            ]
+          },
+          "cohere-embed-v4": {
+            "listed": true,
+            "model_id": "cohere.embed-v4:0",
+            "on_demand_in_region": false,
+            "profiles": [
+              {
+                "id": "eu.cohere.embed-v4:0",
+                "name": "EU Cohere Embed v4",
+                "destination_regions": [
+                  "eu-central-1",
+                  "eu-north-1",
+                  "eu-south-1",
+                  "eu-south-2",
+                  "eu-west-1",
+                  "eu-west-3"
+                ],
+                "stays_in_region": false
+              },
+              {
+                "id": "global.cohere.embed-v4:0",
+                "name": "Global Cohere Embed v4",
+                "destination_regions": [
+                  "eu-central-1"
+                ],
+                "stays_in_region": true
+              }
+            ],
+            "inference_types": [
+              "INFERENCE_PROFILE"
+            ]
+          }
+        },
+        "profile_list_error": null
+      },
+      "text_invoke": {
+        "nova-micro": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile eu.amazon.nova-micro-v1:0",
+              "target": "eu.amazon.nova-micro-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-lite": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile eu.amazon.nova-lite-v1:0",
+              "target": "eu.amazon.nova-lite-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-2-lite": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile global.amazon.nova-2-lite-v1:0",
+              "target": "global.amazon.nova-2-lite-v1:0",
+              "stays_in_region": true,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            },
+            {
+              "via": "profile eu.amazon.nova-2-lite-v1:0",
+              "target": "eu.amazon.nova-2-lite-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "nova-pro": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile eu.amazon.nova-pro-v1:0",
+              "target": "eu.amazon.nova-pro-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        },
+        "claude-haiku-4.5": {
+          "status": "FAIL",
+          "attempts": [
+            {
+              "via": "profile global.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "target": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "stays_in_region": true,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            },
+            {
+              "via": "profile eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "target": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+              "stays_in_region": false,
+              "ok": false,
+              "error": "AccessDeniedException: Your account is currently being verified. Verification normally takes less than 2 hours. Until your account is verified, you may not have access to this operation. If you are still receiving this message after more than 2 hours, please let us know by writing to aws-verification@amazon.com. We appreciate your patience."
+            }
+          ]
+        }
+      },
+      "embed_invoke": {
+        "titan-embed-v2": {
+          "via": "in-region model",
+          "target": "amazon.titan-embed-text-v2:0",
+          "stays_in_region": true,
+          "errors": {
+            "english": "ValidationException: Operation not allowed",
+            "hindi": "ValidationException: Operation not allowed",
+            "hinglish": "ValidationException: Operation not allowed",
+            "arabic": "ValidationException: Operation not allowed"
+          },
+          "status": "FAIL"
+        },
+        "cohere-embed-multilingual-v3": {
+          "via": "in-region model",
+          "target": "cohere.embed-multilingual-v3",
+          "stays_in_region": true,
+          "errors": {
+            "english": "ValidationException: Operation not allowed",
+            "hindi": "ValidationException: Operation not allowed",
+            "hinglish": "ValidationException: Operation not allowed",
+            "arabic": "ValidationException: Operation not allowed"
+          },
+          "status": "FAIL"
+        },
+        "cohere-embed-v4": {
+          "via": "profile global.cohere.embed-v4:0",
+          "target": "global.cohere.embed-v4:0",
+          "stays_in_region": true,
+          "errors": {
+            "english": "ValidationException: Operation not allowed",
+            "hindi": "ValidationException: Operation not allowed",
+            "hinglish": "ValidationException: Operation not allowed",
+            "arabic": "ValidationException: Operation not allowed"
+          },
+          "status": "FAIL"
+        }
+      },
+      "guardrails": {
+        "guardrail_id": "ryde1g4c0ksz",
+        "kept": false,
+        "status": "PASS",
+        "pii": {
+          "english": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "Hi, my Aadhaar is {aadhaar} and PAN {pan}. Salary goes to IBAN {INTERNATIONAL_BANK_ACCOUNT_NUMBER}{iban_uae}. Email me at {EMAIL} or call {PHONE}. Emirates ID {emirates_id}."
+          },
+          "hindi": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "मेरा आधार नंबर {aadhaar} है और पैन {pan} है, कृपया पीएफ ठीक करें।"
+          },
+          "arabic": {
+            "action": "GUARDRAIL_INTERVENED",
+            "leaked": [],
+            "masked_text": "رقم الهوية الإماراتية {emirates_id} والآيبان {INTERNATIONAL_BANK_ACCOUNT_NUMBER}{iban_uae}، يرجى تحديث الراتب."
+          },
+          "devanagari_digits_expected_miss": {
+            "action": "NONE",
+            "masked_text": "आधार २३४५ ६७८९ ०१२४ है",
+            "caught": false
+          }
+        },
+        "injection": {
+          "injection_blocked": true,
+          "benign_passed": true
+        }
+      },
+      "ec2": {
+        "status": "PASS",
+        "t4g.small": true
+      },
+      "rds": {
+        "status": "PASS",
+        "default_postgres_version": "18.3",
+        "db.t4g.micro": true,
+        "note": "pgvector and pg_trgm are created in phase 2 (CREATE EXTENSION)"
+      },
+      "valkey": {
+        "status": "PASS",
+        "valkey_versions": [
+          "7.2",
+          "8.0",
+          "8.1",
+          "8.2",
+          "9.0",
+          "9.1"
+        ]
+      },
+      "sqs": {
+        "status": "PASS"
+      },
+      "kms": {
+        "status": "PASS"
+      },
+      "xray": {
+        "status": "PASS"
+      },
+      "decisions": {
+        "model_ladder": "DECIDE: no rung works in-region. Rungs that leave the region: none",
+        "starting_rung": "none until the ladder is decided",
+        "out_of_region_rungs": "none",
+        "embedding_model": "multilingual-e5 on the EC2 (no in-region Bedrock embedding passed)",
+        "guardrails": "works: all seeded IDs masked in EN/HI/AR, injection blocked, benign passed"
+      }
+    }
+  },
+  "placeholders": {
+    "me-central-1": {
+      "status": "INFO",
+      "opt_in_status": "not-opted-in"
+    }
+  }
+}
