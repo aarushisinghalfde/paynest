@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest IAM. The EC2 role (least privilege: SSM access, its own secrets, the KMS key,
+  the ticket queue, ECR pull, the safe S3 prefixes) and a GitHub Actions deploy role
+  that CI assumes through OIDC to push images to ECR, with no stored AWS keys.
+  Needs the security and data stacks.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  GitHubRepo:
+    Type: String
+    Default: aarushisinghalfde/paynest
+    Description: owner/repo allowed to assume the deploy role (main branch only).
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # ---------------------------------------------------------------- EC2 role
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: !Sub "/${Project}/"          # never /managed/ (blocked by an organization SCP)
+      Description: Paynest EC2 - runs the compose stack
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Session Manager shell instead of SSH, plus the agent that makes it work.
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Policies:
+        - PolicyName: paynest-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnSecrets
+                Effect: Allow
+                Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath]
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Project}/${Env}/*"
+              - Sid: UseDataKey
+                Effect: Allow
+                Action: [kms:Decrypt, kms:GenerateDataKey]
+                Resource: !ImportValue
+                  Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+              - Sid: TicketQueue
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueUrl
+                  - sqs:GetQueueAttributes
+                Resource: !ImportValue
+                  Fn::Sub: "${Project}-${Env}-TicketsQueueArn"
+              - Sid: WatchDeadLetterQueue  # counts only, for the Incidents page
+                Effect: Allow
+                Action: [sqs:GetQueueUrl, sqs:GetQueueAttributes]
+                Resource: !ImportValue
+                  Fn::Sub: "${Project}-${Env}-TicketsDlqArn"
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"           # this action has no resource-level control
+              - Sid: EcrPull
+                Effect: Allow
+                Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${Project}-${Env}/*"
+              - Sid: ReadSafePrefixes    # never raw/: only the loader job reads unmasked data
+                Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub
+                    - "arn:${AWS::Partition}:s3:::${Bucket}/masked/*"
+                    - Bucket: !ImportValue { "Fn::Sub": "${Project}-${Env}-DataBucketName" }
+                  - !Sub
+                    - "arn:${AWS::Partition}:s3:::${Bucket}/kb/*"
+                    - Bucket: !ImportValue { "Fn::Sub": "${Project}-${Env}-DataBucketName" }
+                  - !Sub
+                    - "arn:${AWS::Partition}:s3:::${Bucket}/rules/*"
+                    - Bucket: !ImportValue { "Fn::Sub": "${Project}-${Env}-DataBucketName" }
+              - Sid: ListSafePrefixes
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub
+                  - "arn:${AWS::Partition}:s3:::${Bucket}"
+                  - Bucket: !ImportValue { "Fn::Sub": "${Project}-${Env}-DataBucketName" }
+                Condition:
+                  StringLike:
+                    s3:prefix: ["masked/*", "kb/*", "rules/*"]
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: !Sub "/${Project}/"
+      Roles: [!Ref Ec2Role]
+
+  # ---------------------------------------------------------------- GitHub Actions (OIDC)
+  # GitHub proves "this job runs in repo X on branch main"; AWS hands it short-lived
+  # credentials for the deploy role. No AWS keys are stored in GitHub.
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: !Sub "/${Project}/"
+      Description: Paynest CI - push images to ECR (main branch only)
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidcProvider }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: paynest-ecr-push
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPush
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${Project}-${Env}/*"
+
+Outputs:
+  Ec2InstanceProfileName:
+    Value: !Ref Ec2InstanceProfile
+    Export: { Name: !Sub "${Project}-${Env}-Ec2InstanceProfileName" }
+  Ec2RoleArn:
+    Value: !GetAtt Ec2Role.Arn
+    Export: { Name: !Sub "${Project}-${Env}-Ec2RoleArn" }
+  GitHubDeployRoleArn:
+    Description: Put this in the GitHub repo as the variable AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt GitHubDeployRole.Arn
+    Export: { Name: !Sub "${Project}-${Env}-GitHubDeployRoleArn" }

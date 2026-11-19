@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest database. PostgreSQL 17 on RDS (db.t4g.micro) in the private subnets, encrypted
+  with the Paynest KMS key, reachable only from the EC2 security group. The master
+  password is generated and stored by AWS in Secrets Manager (nobody types it).
+  pgvector and pg_trgm are enabled later by scripts/migrate.py, as on the laptop.
+  Needs the network and security stacks.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # RDS must be told which subnets it may use; these are the two PRIVATE ones (2 AZs required).
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "${Project}-${Env} private subnets for RDS"
+      SubnetIds: !Split
+        - ","
+        - !ImportValue
+          Fn::Sub: "${Project}-${Env}-PrivateSubnetIds"
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot            # deleting the stack keeps a final snapshot of the data
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub "${Project}-${Env}-db"
+      Engine: postgres
+      EngineVersion: "17"
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      StorageEncrypted: true
+      KmsKeyId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+      DBName: paynest
+      MasterUsername: paynest_admin
+      ManageMasterUserPassword: true    # AWS generates the password and keeps it in Secrets Manager
+      MasterUserSecret:
+        KmsKeyId: !ImportValue
+          Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !ImportValue
+          Fn::Sub: "${Project}-${Env}-RdsSecurityGroupId"
+      PubliclyAccessible: false
+      MultiAZ: false                    # demo: one instance; production would be Multi-AZ
+      BackupRetentionPeriod: 1          # 1 day of automatic backups (point-in-time restore)
+      DeleteAutomatedBackups: true
+      CopyTagsToSnapshot: true
+      AutoMinorVersionUpgrade: true
+      EnablePerformanceInsights: false
+      MonitoringInterval: 0
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-db" }
+
+Outputs:
+  DbEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+    Export: { Name: !Sub "${Project}-${Env}-DbEndpoint" }
+  DbPort:
+    Value: !GetAtt Database.Endpoint.Port
+    Export: { Name: !Sub "${Project}-${Env}-DbPort" }
+  DbName:
+    Value: paynest
+    Export: { Name: !Sub "${Project}-${Env}-DbName" }
+  DbSecretArn:
+    Description: Secrets Manager secret holding the master username and password
+    Value: !GetAtt Database.MasterUserSecret.SecretArn
+    Export: { Name: !Sub "${Project}-${Env}-DbSecretArn" }
