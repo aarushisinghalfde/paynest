@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest data. A private S3 bucket for data files (raw/, masked/, kb/, rules/),
+  production SQS queues (tickets-in with a dead-letter queue) carrying ticket IDs only,
+  and ECR repositories for the two Docker images. Everything is encrypted with the
+  Paynest KMS key. Needs the security stack (imports the KMS key).
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # Landing zone for data FILES (never sent through SQS):
+  #   raw/     files exactly as received; only the loader reads them
+  #   masked/  PII-masked copies, safe for the app, evals and relabelling
+  #   kb/, rules/  knowledge-base articles and statutory rules
+  # Retained if the stack is deleted, so real data is never lost by accident.
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${Project}-${Env}-data-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !ImportValue
+                Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+            BucketKeyEnabled: true      # far fewer KMS calls, so lower cost
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled                 # an overwritten or deleted file can be recovered
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration: { NoncurrentDays: 30 }
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-data" }
+
+  # Refuse any request that is not over HTTPS.
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt DataBucket.Arn
+              - !Sub "${DataBucket.Arn}/*"
+            Condition:
+              Bool: { "aws:SecureTransport": "false" }
+
+  # Messages that failed 3 times land here, so one bad ticket never blocks the queue.
+  TicketsDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Project}-${Env}-tickets-dlq"
+      MessageRetentionPeriod: 1209600   # 14 days: time to inspect and redrive failures
+      KmsMasterKeyId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+
+  # Same settings as the dev queue from phase 1, so the worker behaves identically.
+  # Messages carry a ticket ID only (claim check); the ticket itself lives in Postgres.
+  TicketsIn:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Project}-${Env}-tickets-in"
+      VisibilityTimeout: 60             # a ticket is hidden from other workers for 60 s
+      ReceiveMessageWaitTimeSeconds: 20 # long polling
+      MessageRetentionPeriod: 345600    # 4 days
+      KmsMasterKeyId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TicketsDlq.Arn
+        maxReceiveCount: 3
+
+  # One repository per image: "app" (api, worker, mock payroll API) and "web" (nginx + React).
+  AppRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${Project}-${Env}/app"
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EmptyOnDelete: true               # lets the stack be deleted even with images inside
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules": [{"rulePriority": 1, "description": "Keep the last 5 images",
+            "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 5},
+            "action": {"type": "expire"}}]}
+
+  WebRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${Project}-${Env}/web"
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules": [{"rulePriority": 1, "description": "Keep the last 5 images",
+            "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 5},
+            "action": {"type": "expire"}}]}
+
+Outputs:
+  DataBucketName:
+    Value: !Ref DataBucket
+    Export: { Name: !Sub "${Project}-${Env}-DataBucketName" }
+  TicketsQueueName:
+    Value: !GetAtt TicketsIn.QueueName
+    Export: { Name: !Sub "${Project}-${Env}-TicketsQueueName" }
+  TicketsQueueArn:
+    Value: !GetAtt TicketsIn.Arn
+    Export: { Name: !Sub "${Project}-${Env}-TicketsQueueArn" }
+  TicketsDlqArn:
+    Value: !GetAtt TicketsDlq.Arn
+    Export: { Name: !Sub "${Project}-${Env}-TicketsDlqArn" }
+  AppRepositoryUri:
+    Value: !GetAtt AppRepository.RepositoryUri
+    Export: { Name: !Sub "${Project}-${Env}-AppRepositoryUri" }
+  WebRepositoryUri:
+    Value: !GetAtt WebRepository.RepositoryUri
+    Export: { Name: !Sub "${Project}-${Env}-WebRepositoryUri" }
