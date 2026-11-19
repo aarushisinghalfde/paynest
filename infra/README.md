@@ -1,5 +1,5 @@
 # infra
 
-- `local/`: configuration for the local Docker Compose stack (ElasticMQ queues).
-- Terraform for Sydney (`demo.tfvars`) and the placeholder production regions
-  (`india.tfvars`, `uae.tfvars`) is added in phase 2.
+Terraform for Sydney (`demo.tfvars`) and the placeholder production regions
+(`india.tfvars`, `uae.tfvars`) is added in phase 2, including the production SQS
+queues. Development queues are created by `scripts/create_dev_queues.py`.

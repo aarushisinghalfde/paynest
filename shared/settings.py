@@ -27,11 +27,12 @@ def _env(name: str, default: str) -> str:
 REGION = _env("PAYNEST_REGION", "demo")
 
 DATABASE_URL = _env("DATABASE_URL", "postgresql://paynest:paynest@localhost:5433/paynest")
-VALKEY_URL = _env("VALKEY_URL", "redis://localhost:6380/0")
+# Upstash Redis, locally and in production: rediss://default:<token>@<host>:6379
+REDIS_URL = os.environ.get("REDIS_URL", "")
 
-# Local runs point SQS at ElasticMQ; in AWS this is left empty and real SQS is used.
-SQS_ENDPOINT_URL = os.environ.get("SQS_ENDPOINT_URL", "http://localhost:9324")
-SQS_QUEUE_NAME = _env("SQS_QUEUE_NAME", "tickets-in")
+# Real Amazon SQS in the demo region. Development uses its own queue (see
+# scripts/create_dev_queues.py); production queues come from Terraform in phase 2.
+SQS_QUEUE_NAME = _env("SQS_QUEUE_NAME", "paynest-dev-tickets-in")
 
 RESULTS_DIR = ROOT / "results"
 

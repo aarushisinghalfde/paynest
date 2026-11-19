@@ -18,7 +18,7 @@ def health() -> dict:
 
 @app.get("/ready")
 def ready(response: Response) -> dict:
-    """Readiness: Postgres (with extensions), Valkey and the queue are reachable."""
+    """Readiness: Postgres (with extensions), Redis and the queue are reachable."""
     checks = {}
     for name, check in deps.CHECKS.items():
         try:

@@ -5,11 +5,11 @@
 
 Checks, from the laptop:
   1. API /health returns 200
-  2. API /ready: Postgres (with vector + pg_trgm), Valkey and the queue are reachable
+  2. API /ready: Postgres (with vector + pg_trgm), Redis and the queue are reachable
   3. Web: /chat and /review load
   4. Mock payroll API /health returns 200
   5. Worker: a test message sent to tickets-in is received and processed
-  6. Migrations: both extensions exist in Postgres
+  6. Migrations: both extensions exist in Postgres (scripts/migrate.py ran)
 Appends one row per check to results/gates.csv. Exit code 0 only if all pass.
 """
 import csv
@@ -78,7 +78,7 @@ def check_worker():
     check_id = uuid.uuid4().hex
     client = sqs_client()
     client.send_message(QueueUrl=queue_url(client), MessageBody=json.dumps({"check_id": check_id}))
-    cache = redis.Redis.from_url(settings.VALKEY_URL)
+    cache = redis.Redis.from_url(settings.REDIS_URL)
     deadline = time.time() + 30
     while time.time() < deadline:
         if cache.get(PROCESSED_KEY.format(check_id)):

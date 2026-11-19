@@ -27,12 +27,7 @@ def test_model_ladder_is_set_for_the_active_provider():
     assert cfg["providers"][cfg["provider"]]["ladder"], "the active provider needs at least one rung"
 
 
-def test_local_queue_has_a_dead_letter_queue():
-    conf = (ROOT / "infra" / "local" / "elasticmq.conf").read_text(encoding="utf-8")
-    assert "tickets-dlq" in conf and "maxReceiveCount = 3" in conf
-
-
-def test_migration_creates_both_extensions():
-    text = (ROOT / "migrations" / "versions" / "0001_extensions.py").read_text(encoding="utf-8")
+def test_first_migration_creates_both_extensions():
+    text = (ROOT / "db" / "migrations" / "001_extensions.sql").read_text(encoding="utf-8")
     assert "CREATE EXTENSION IF NOT EXISTS vector" in text
     assert "CREATE EXTENSION IF NOT EXISTS pg_trgm" in text

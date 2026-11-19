@@ -12,7 +12,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-extend-exclude = ["web", "migrations/versions", "scripts/phase0"]
+extend-exclude = ["web", "scripts/phase0"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

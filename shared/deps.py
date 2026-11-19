@@ -16,14 +16,16 @@ def check_postgres() -> str:
     found = {r[0] for r in rows}
     missing = REQUIRED_EXTENSIONS - found
     if missing:
-        raise RuntimeError(f"missing extensions {sorted(missing)}: run alembic upgrade head")
+        raise RuntimeError(f"missing extensions {sorted(missing)}: run python scripts/migrate.py")
     return "extensions " + ", ".join(sorted(REQUIRED_EXTENSIONS))
 
 
-def check_valkey() -> str:
+def check_redis() -> str:
     import redis
 
-    client = redis.Redis.from_url(settings.VALKEY_URL, socket_connect_timeout=3)
+    if not settings.REDIS_URL:
+        raise RuntimeError("REDIS_URL is not set: add your Upstash URL to .env")
+    client = redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
     client.ping()
     return "ping ok"
 
@@ -32,4 +34,4 @@ def check_queue() -> str:
     return queue_url(sqs_client())
 
 
-CHECKS = {"postgres": check_postgres, "valkey": check_valkey, "queue": check_queue}
+CHECKS = {"postgres": check_postgres, "redis": check_redis, "queue": check_queue}

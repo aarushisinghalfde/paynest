@@ -1,8 +1,8 @@
 """Queue worker.
 
-Phase 1: receive messages from tickets-in, log them, and delete them. Messages that
-fail are left on the queue, so SQS/ElasticMQ redelivers them and moves them to
-tickets-dlq after 3 attempts.
+Phase 1: receive messages from the tickets queue, log them, and delete them. Messages
+that fail are left on the queue, so SQS redelivers them and moves them to the
+dead-letter queue after 3 attempts.
 
 Phase 5 replaces handle() with the LangGraph run, and a message is then deleted only
 after the run has reached a checkpoint.
@@ -33,7 +33,7 @@ def handle(message: dict, cache=None) -> dict:
     return body
 
 
-def process_once(client, url: str, cache=None, wait_seconds: int = 10) -> int:
+def process_once(client, url: str, cache=None, wait_seconds: int = 20) -> int:
     """Receive one batch; delete each message only if handle() succeeded."""
     resp = client.receive_message(QueueUrl=url, MaxNumberOfMessages=10, WaitTimeSeconds=wait_seconds)
     messages = resp.get("Messages", [])
@@ -54,7 +54,8 @@ def wait_for_queue(client, attempts: int = 30, delay: float = 2.0) -> str:
         except Exception as exc:  # noqa: BLE001
             log.info("queue not ready (%s/%s): %s", attempt, attempts, type(exc).__name__)
             time.sleep(delay)
-    raise RuntimeError(f"queue {settings.SQS_QUEUE_NAME} not reachable at {settings.SQS_ENDPOINT_URL}")
+    raise RuntimeError(f"queue {settings.SQS_QUEUE_NAME} not reachable in {settings.AWS_REGION}: "
+                       "check `aws login` and scripts/create_dev_queues.py")
 
 
 def main() -> None:
@@ -72,7 +73,9 @@ def main() -> None:
 
     client = sqs_client()
     url = wait_for_queue(client)
-    cache = redis.Redis.from_url(settings.VALKEY_URL)
+    if not settings.REDIS_URL:
+        raise RuntimeError("REDIS_URL is not set: add your Upstash URL to .env")
+    cache = redis.Redis.from_url(settings.REDIS_URL)
     log.info("worker listening on %s", url)
     while not stop["now"]:
         process_once(client, url, cache)

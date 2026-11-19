@@ -1,11 +1,10 @@
 # Phase 1. Later phases add LangGraph, Presidio, embeddings and evaluation tools.
 fastapi>=0.115
 uvicorn[standard]>=0.30
-boto3>=1.35
+boto3[crt]>=1.42.21     # [crt] is needed for `aws login` credentials
+awscrt>=0.30.0          # refreshes `aws login` credentials automatically
 psycopg[binary]>=3.2
-sqlalchemy>=2.0
-alembic>=1.13
-redis>=5.0              # Valkey speaks the Redis protocol
+redis>=5.0              # Upstash Redis client
 pyyaml>=6.0
 python-dotenv>=1.0
 # tests and lint

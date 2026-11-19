@@ -1,13 +1,22 @@
 # Local stack for phase 1. One command starts everything:
 #   docker compose up -d --build --wait
-# Host ports are offset (5433, 6380) to avoid clashing with anything already installed.
+#
+# Postgres runs locally. Redis (Upstash) and the queue (Amazon SQS in Sydney) are
+# real cloud services, so before starting:
+#   - .env holds REDIS_URL (your Upstash URL)
+#   - `aws login --profile payce-fde` is current; ~/.aws is mounted into the containers
+#   - the dev queues exist: python scripts/create_dev_queues.py
 
 x-python-env: &python-env
   PAYNEST_REGION: demo
   DATABASE_URL: postgresql://paynest:paynest@postgres:5432/paynest
-  VALKEY_URL: redis://valkey:6379/0
-  SQS_ENDPOINT_URL: http://elasticmq:9324
-  SQS_QUEUE_NAME: tickets-in
+  REDIS_URL: ${REDIS_URL:?set REDIS_URL (Upstash) in .env}
+  SQS_QUEUE_NAME: ${SQS_QUEUE_NAME:-paynest-dev-tickets-in}
+  AWS_PROFILE: ${AWS_PROFILE:-payce-fde}
+
+x-aws-credentials: &aws-credentials
+  # Read-write: `aws login` credentials are refreshed in ~/.aws/login/cache.
+  - ~/.aws:/root/.aws
 
 services:
   postgres:
@@ -23,29 +32,15 @@ services:
       interval: 3s
       retries: 20
 
-  valkey:
-    image: valkey/valkey:8
-    ports: ["6380:6379"]
-    healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
-      interval: 3s
-      retries: 20
-
-  elasticmq:                    # local SQS: tickets-in + tickets-dlq
-    image: softwaremill/elasticmq-native
-    ports: ["9324:9324", "9325:9325"]   # 9325 = queue browser UI
-    volumes: ["./infra/local/elasticmq.conf:/opt/elasticmq.conf:ro"]
-
   api:
     build: .
     # Migrations run first, so the API never starts against an old schema.
-    command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "python scripts/migrate.py && uvicorn api.main:app --host 0.0.0.0 --port 8000"
     environment: *python-env
+    volumes: *aws-credentials
     ports: ["8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
-      valkey: {condition: service_healthy}
-      elasticmq: {condition: service_started}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s
@@ -55,6 +50,7 @@ services:
     build: .
     command: python -m worker.main
     environment: *python-env
+    volumes: *aws-credentials
     depends_on:
       api: {condition: service_healthy}
 

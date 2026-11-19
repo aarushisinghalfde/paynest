@@ -19,7 +19,7 @@ def test_health_is_200_and_names_the_region():
 
 
 def test_ready_when_all_dependencies_answer(monkeypatch):
-    ok = {"postgres": lambda: "ok", "valkey": lambda: "ok", "queue": lambda: "ok"}
+    ok = {"postgres": lambda: "ok", "redis": lambda: "ok", "queue": lambda: "ok"}
     monkeypatch.setattr(deps, "CHECKS", ok)
     resp = client.get("/ready")
     assert resp.status_code == 200
@@ -30,8 +30,8 @@ def test_not_ready_names_the_failing_dependency(monkeypatch):
     def down():
         raise ConnectionError("refused")
 
-    monkeypatch.setattr(deps, "CHECKS", {"postgres": lambda: "ok", "valkey": down})
+    monkeypatch.setattr(deps, "CHECKS", {"postgres": lambda: "ok", "redis": down})
     resp = client.get("/ready")
     assert resp.status_code == 503
-    assert resp.json()["checks"]["valkey"]["ok"] is False
-    assert "refused" in resp.json()["checks"]["valkey"]["detail"]
+    assert resp.json()["checks"]["redis"]["ok"] is False
+    assert "refused" in resp.json()["checks"]["redis"]["detail"]
