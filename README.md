@@ -5,6 +5,9 @@ by rules, draft replies from approved sources, check every reply, and put a huma
 loop for statutory answers. Built phase by phase; each phase ends at a gate recorded in
 `results/gates.csv`.
 
+**Architecture:** see [docs/architecture.md](docs/architecture.md) for diagrams, the AWS
+stacks, request/data/release flows, security controls, cost and the decision log.
+
 **Build region:** Sydney (`ap-southeast-2`), account Agentic Core FDE. Production
 regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder config.
 **Models:** OpenRouter stands in until AWS lifts the Bedrock hold on the account
@@ -33,11 +36,27 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 | `config/regions/` | `demo.yaml` (Sydney, built); `india.yaml`, `uae.yaml` (placeholders) | 1 |
 | `config/models.yaml` | Provider and model ladder, cheapest first | 1 |
 | `infra/` | `local/elasticmq.conf` (optional local queue); `cfn/` CloudFormation templates from phase 2 | 1–2 |
+| `docs/` | `architecture.md`: what is built, diagrams, decisions | 2+ |
+| `.github/workflows/` | `CI.yml` (ruff, pytest, web build, cfn-lint on every push); `images.yml` (release images, version tags only) | 1–2 |
 | `scripts/phase0/` | AWS account and day-1 checks | 0 |
 | `scripts/create_dev_queues.py` | Creates the dev SQS queues in Sydney | 1 |
 | `scripts/migrate.py` | Applies `db/migrations/*.sql`, each once | 1 |
 | `scripts/check_phase1.py` | Phase 1 gate | 1 |
+| `scripts/cfn.ps1` | Validate, plan (change set), apply, output, delete a CloudFormation stack | 2 |
+| `scripts/put_secrets.ps1` | Copies secrets from `.env` into SSM Parameter Store (encrypted) | 2 |
 | `data/`, `evals/` | Case data (raw is git-ignored) and evaluation sets | 3+ |
+
+## Run it yourself (reviewers)
+
+Two ways to look at Paynest:
+
+1. **Live demo:** open the CloudFront URL shared with you (from the end of phase 2). It is
+   up only while the demo EC2 and RDS are running, so agree a time with the owner.
+2. **On your own laptop:** clone the repo and follow **Run it** below with your own
+   `.env`. You never need the owner's secrets or AWS account: use your own free Upstash
+   Redis URL, and the offline queue (`SQS_ENDPOINT_URL=http://localhost:9324` with
+   `--profile local-queue`) instead of Amazon SQS. A step-by-step no-AWS walkthrough will be
+   verified and added here before handover.
 
 ## Run it
 

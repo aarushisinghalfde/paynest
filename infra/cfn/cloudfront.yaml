@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest public address. A CloudFront distribution in front of the EC2: free HTTPS on
+  https://<id>.cloudfront.net, no domain needed. API calls, the dashboard and WebSockets
+  are passed through uncached; only the hashed static files under /assets/ are cached.
+  The EC2 security group already accepts port 80 from CloudFront only. Needs the ec2 stack.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  OriginDomain:
+    Type: String
+    Description: >-
+      Public DNS name of the EC2 (ec2-x-x-x-x.<region>.compute.amazonaws.com, fixed by the
+      Elastic IP). cfn.ps1 looks it up automatically ("auto:ec2-dns" in the params file).
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${Project}-${Env} dashboard + API"
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_All      # includes Australia and India edge locations
+        Origins:
+          - Id: ec2
+            DomainName: !Ref OriginDomain
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only   # demo: the EC2 has no certificate (see docs)
+              HTTPPort: 80
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: ec2
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS-managed policies: CachingDisabled, and AllViewerExceptHostHeader
+          # (forwards headers, cookies and query strings; WebSockets work).
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        CacheBehaviors:
+          # Vite puts content-hashed files under /assets/, so they can be cached safely.
+          - PathPattern: /assets/*
+            TargetOriginId: ec2
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # AWS-managed CachingOptimized
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-cdn" }
+
+Outputs:
+  Url:
+    Description: The public HTTPS address of the dashboard
+    Value: !Sub "https://${Distribution.DomainName}"
+  DistributionDomainName:
+    Value: !GetAtt Distribution.DomainName
+    Export: { Name: !Sub "${Project}-${Env}-DistributionDomainName" }
+  DistributionId:
+    Value: !Ref Distribution
+    Export: { Name: !Sub "${Project}-${Env}-DistributionId" }

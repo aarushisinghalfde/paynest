@@ -67,7 +67,7 @@ queue modes.
 
 ```mermaid
 flowchart TB
-  U["Browser"] -->|HTTPS| CF["CloudFront<br/>(planned)"]
+  U["Browser"] -->|HTTPS| CF["CloudFront<br/>(written, not deployed)"]
   subgraph VPC["VPC 10.20.0.0/16 (no NAT)"]
     subgraph PUB["Public subnets x2"]
       EC2["EC2 t4g.small + Elastic IP<br/>web, api, worker, mock payroll<br/>(written, not deployed)"]
@@ -99,7 +99,7 @@ flowchart TB
 | 4 | `iam` | EC2 role + instance profile (least privilege); GitHub OIDC provider; GitHub deploy role (push to ECR only). | Deployed |
 | 5 | `rds` | PostgreSQL 17.11 `db.t4g.micro`, private, KMS, password managed by AWS in Secrets Manager, 1-day backups, final snapshot on delete. | Written |
 | 6 | `ec2` | t4g.small (AL2023 arm64), Elastic IP, encrypted disk, IMDSv2; boot script installs Docker and a `paynest` systemd service; grants read access to the DB secret. | Written |
-| 7 | `cloudfront` | Public HTTPS address in front of the EC2. | Planned |
+| 7 | `cloudfront` | Distribution `https://<id>.cloudfront.net` in front of the EC2: HTTPS for viewers, HTTP to the origin (EC2 DNS looked up automatically), no caching except hashed `/assets/*`, WebSockets pass through. | Written |
 
 Every template has a `Rules` check: `params/india.json` and `params/uae.json`
 (`Deployable=false`) can be validated but never deployed. Stacks share values through
@@ -257,7 +257,7 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `cloudfront`. 
 
 1. First release `v0.1.0` (images into ECR).
 2. Deploy `rds`, then `ec2` (same session; hourly billing starts).
-3. Write and deploy `cloudfront`; start/stop scripts; `scripts/check_phase2.py` gate.
+3. Deploy `cloudfront`; write start/stop and deploy scripts; `scripts/check_phase2.py` gate.
 4. Phase 3 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
    AgentCore (phase 5).
 

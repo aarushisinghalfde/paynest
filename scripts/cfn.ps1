@@ -9,7 +9,7 @@
     .\scripts\cfn.ps1 events network       # show recent failures, if a deploy failed
     .\scripts\cfn.ps1 delete network       # delete the stack (asks you to type its name)
 
-  Stacks, in deploy order: network, security, data, iam, rds, ec2 (cloudfront next).
+  Stacks, in deploy order: network, security, data, iam, rds, ec2, cloudfront.
 
   Stack "network" uses infra\cfn\network.yaml and is called paynest-demo-network.
   -Target india or uae uses the placeholder params; the templates refuse to deploy them.
@@ -88,6 +88,15 @@ function Resolve-ParamValue {
     if (-not $id -or $id -eq "None") { throw "Could not find the CloudFront prefix list in $region." }
     Write-Host "CloudFront origin-facing prefix list in ${region}: $id" -ForegroundColor DarkGray
     return $id
+  }
+  if ($Value -eq "auto:ec2-dns") {
+    # Public DNS name of the Paynest EC2 (fixed by its Elastic IP), used as the CloudFront origin.
+    $dns = Get-Text @("ec2", "describe-instances", "--region", $region,
+      "--filters", "Name=tag:Name,Values=$Project-$Target-server", "Name=instance-state-name,Values=running,stopped",
+      "--query", "Reservations[0].Instances[0].PublicDnsName", "--output", "text")
+    if (-not $dns -or $dns -eq "None") { throw "No Paynest EC2 found in $region. Deploy the ec2 stack first." }
+    Write-Host "EC2 public DNS in ${region}: $dns" -ForegroundColor DarkGray
+    return $dns
   }
   return $Value
 }

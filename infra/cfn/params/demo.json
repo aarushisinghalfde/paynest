@@ -3,6 +3,7 @@
   "parameters": {
     "Deployable": "true",
     "VpcCidr": "10.20.0.0/16",
-    "CloudFrontPrefixListId": "auto:cloudfront"
+    "CloudFrontPrefixListId": "auto:cloudfront",
+    "OriginDomain": "auto:ec2-dns"
   }
 }
