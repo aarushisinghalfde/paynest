@@ -32,7 +32,7 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 | `db/migrations/` | Plain SQL files, applied in order by `scripts/migrate.py` | 1+ |
 | `config/regions/` | `demo.yaml` (Sydney, built); `india.yaml`, `uae.yaml` (placeholders) | 1 |
 | `config/models.yaml` | Provider and model ladder, cheapest first | 1 |
-| `infra/` | `local/elasticmq.conf` (optional local queue); Terraform from phase 2 | 1–2 |
+| `infra/` | `local/elasticmq.conf` (optional local queue); `cfn/` CloudFormation templates from phase 2 | 1–2 |
 | `scripts/phase0/` | AWS account and day-1 checks | 0 |
 | `scripts/create_dev_queues.py` | Creates the dev SQS queues in Sydney | 1 |
 | `scripts/migrate.py` | Applies `db/migrations/*.sql`, each once | 1 |

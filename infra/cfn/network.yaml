@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest network. Our own VPC (not the default one): 2 public subnets for the EC2
+  (reached only through CloudFront), 2 private subnets for RDS (no route to the
+  internet), an internet gateway, and no NAT gateway.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: Only demo (Sydney) is deployed. India and UAE are placeholders.
+  VpcCidr:
+    Type: String
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/16$'
+    Description: A /16 range; each region gets a different one so networks could be connected later.
+
+# Safety catch: creating a change set with india.json or uae.json fails here.
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true          # needed for RDS endpoints and CloudFront origin names
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-vpc" }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-igw" }
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # !Cidr splits the /16 into /24 blocks: block n is x.x.n.0/24.
+  # Public subnets use blocks 0 and 1; private subnets use 10 and 11.
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 16, 8]]
+      MapPublicIpOnLaunch: false        # the EC2 gets an Elastic IP instead
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-public-1" }
+        - { Key: Tier, Value: public }
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 16, 8]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-public-2" }
+        - { Key: Tier, Value: public }
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [10, !Cidr [!Ref VpcCidr, 16, 8]]
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-private-1" }
+        - { Key: Tier, Value: private }
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [11, !Cidr [!Ref VpcCidr, 16, 8]]
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-private-2" }
+        - { Key: Tier, Value: private }
+
+  # What makes a subnet "public": its route table sends 0.0.0.0/0 to the internet gateway.
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-public-rt" }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # What makes a subnet "private": its route table has only the VPC-local route.
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-private-rt" }
+
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+# Exports let later stacks (security groups, EC2, RDS) look these up by name.
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub "${Project}-${Env}-VpcId" }
+  VpcCidr:
+    Value: !Ref VpcCidr
+    Export: { Name: !Sub "${Project}-${Env}-VpcCidr" }
+  PublicSubnetIds:
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+    Export: { Name: !Sub "${Project}-${Env}-PublicSubnetIds" }
+  PrivateSubnetIds:
+    Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+    Export: { Name: !Sub "${Project}-${Env}-PrivateSubnetIds" }

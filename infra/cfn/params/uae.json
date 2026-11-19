@@ -1,0 +1,8 @@
+{
+  "_note": "PLACEHOLDER: production UAE. Never deployed (Deployable = false).",
+  "region": "me-central-1",
+  "parameters": {
+    "Deployable": "false",
+    "VpcCidr": "10.40.0.0/16"
+  }
+}

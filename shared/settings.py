@@ -31,7 +31,7 @@ DATABASE_URL = _env("DATABASE_URL", "postgresql://paynest:paynest@localhost:5433
 REDIS_URL = os.environ.get("REDIS_URL", "")
 
 # Real Amazon SQS in the demo region. Development uses its own queue (see
-# scripts/create_dev_queues.py); production queues come from Terraform in phase 2.
+# scripts/create_dev_queues.py); production queues come from CloudFormation in phase 2.
 SQS_QUEUE_NAME = _env("SQS_QUEUE_NAME", "paynest-dev-tickets-in")
 # Optional: point at the local ElasticMQ stand-in instead of real SQS
 # (http://localhost:9324 from the laptop). Empty means real Amazon SQS.
