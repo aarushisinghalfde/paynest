@@ -2,7 +2,9 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   Paynest IAM. The EC2 role (least privilege: SSM access, its own secrets, the KMS key,
   the ticket queue, ECR pull, the safe S3 prefixes) and a GitHub Actions deploy role
-  that CI assumes through OIDC to push images to ECR, with no stored AWS keys.
+  that the images workflow assumes through OIDC to push images to ECR, with no stored
+  AWS keys. The role trusts only this repository's permanent IDs, and only version
+  tags (v*) or a manual run from main.
   Needs the security and data stacks.
 
 Parameters:
@@ -16,10 +18,20 @@ Parameters:
     Type: String
     AllowedValues: ["true", "false"]
     Default: "false"
-  GitHubRepo:
+  # GitHub's subject format for repositories created after July 2026 includes permanent
+  # numeric IDs, so a deleted-and-recreated repo with the same name cannot get in.
+  GitHubOwner:
     Type: String
-    Default: aarushisinghalfde/paynest
-    Description: owner/repo allowed to assume the deploy role (main branch only).
+    Default: aarushisinghalfde
+  GitHubOwnerId:
+    Type: String
+    Default: "319837126"
+  GitHubRepoName:
+    Type: String
+    Default: paynest
+  GitHubRepoId:
+    Type: String
+    Default: "1464089610"
 
 Rules:
   OnlyDeployableEnvironments:
@@ -123,7 +135,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Path: !Sub "/${Project}/"
-      Description: Paynest CI - push images to ECR (main branch only)
+      Description: Paynest CI - push images to ECR (version tags or manual run from main)
       MaxSessionDuration: 3600
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -134,7 +146,12 @@ Resources:
             Condition:
               StringEquals:
                 "token.actions.githubusercontent.com:aud": sts.amazonaws.com
-                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+              StringLike:
+                "token.actions.githubusercontent.com:sub":
+                  # a version tag, e.g. v0.2.0 (the normal release path)
+                  - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepoName}@${GitHubRepoId}:ref:refs/tags/v*"
+                  # a manual "Run workflow" from main (fallback)
+                  - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepoName}@${GitHubRepoId}:ref:refs/heads/main"
       Policies:
         - PolicyName: paynest-ecr-push
           PolicyDocument:

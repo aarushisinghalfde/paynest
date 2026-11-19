@@ -9,7 +9,7 @@
     .\scripts\cfn.ps1 events network       # show recent failures, if a deploy failed
     .\scripts\cfn.ps1 delete network       # delete the stack (asks you to type its name)
 
-  Stacks, in deploy order: network, security, data (more follow in phase 2).
+  Stacks, in deploy order: network, security, data, iam, rds, ec2 (cloudfront next).
 
   Stack "network" uses infra\cfn\network.yaml and is called paynest-demo-network.
   -Target india or uae uses the placeholder params; the templates refuse to deploy them.

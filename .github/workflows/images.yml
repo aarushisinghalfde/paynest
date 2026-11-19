@@ -1,14 +1,18 @@
-# Builds the two Docker images on GitHub's machines and pushes them to ECR in Sydney,
-# only when started by hand (Actions tab > Images > Run workflow).
-# Signs in to AWS through OIDC (the GitHubDeployRole from infra/cfn/iam.yaml):
-# no AWS keys are stored in GitHub. Images are arm64, to match the t4g (Graviton) EC2.
+# Release images: test, then build "app" and "web" natively on ARM (same CPU type as the
+# t4g EC2) and push them to ECR in Sydney.
 #
-# One-time setup: repo Settings > Secrets and variables > Actions > Variables >
-#   AWS_DEPLOY_ROLE_ARN = the GitHubDeployRoleArn output of the iam stack
+# Runs ONLY when you approve a release by pushing a version tag:
+#     git tag v0.2.0
+#     git push origin v0.2.0
+# or by clicking "Run workflow" on main (fallback). Ordinary pushes do not run it.
+#
+# Signs in to AWS through OIDC (GitHubDeployRole in infra/cfn/iam.yaml): no AWS keys in
+# GitHub. One-time setup: repo variable AWS_DEPLOY_ROLE_ARN = that role's ARN.
 name: Images
 
 on:
-  # Manual only: nothing reaches AWS unless you click "Run workflow" in the Actions tab.
+  push:
+    tags: ["v*"]
   workflow_dispatch: {}
 
 permissions:
@@ -16,15 +20,32 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+      - run: pytest
+
+  build:
+    needs: test                  # no image unless the tests pass
+    runs-on: ubuntu-24.04-arm    # native ARM runner: no emulation, free for public repos
     strategy:
+      fail-fast: false           # one failing image does not cancel the other
       matrix:
         include:
           - image: app           # api, worker, mock payroll API
             context: .
           - image: web           # nginx + React
             context: web
+    env:
+      # v0.2.0 for a tag release; the commit SHA for a manual run from main
+      VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +59,6 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - uses: docker/setup-qemu-action@v3      # lets an x86 runner build arm64 images
       - uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.image }}
@@ -48,7 +68,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/paynest-demo/${{ matrix.image }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/paynest-demo/${{ matrix.image }}:${{ env.VERSION }}
             ${{ steps.ecr.outputs.registry }}/paynest-demo/${{ matrix.image }}:latest
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
