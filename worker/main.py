@@ -58,6 +58,20 @@ def wait_for_queue(client, attempts: int = 30, delay: float = 2.0) -> str:
                        "check `aws login` and scripts/create_dev_queues.py")
 
 
+def run(client, url: str, cache, stop: dict, sleep=time.sleep) -> None:
+    """Poll until stopped. A queue outage (restart, network blip) is logged and retried
+    with a growing pause, instead of crashing the worker."""
+    delay = 1.0
+    while not stop["now"]:
+        try:
+            process_once(client, url, cache)
+            delay = 1.0
+        except Exception as exc:  # noqa: BLE001 - keep polling; messages stay safe on the queue
+            log.warning("queue unavailable (%s); retrying in %.0fs", type(exc).__name__, delay)
+            sleep(delay)
+            delay = min(delay * 2, 30.0)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     stop = {"now": False}
@@ -77,8 +91,7 @@ def main() -> None:
         raise RuntimeError("REDIS_URL is not set: add your Upstash URL to .env")
     cache = redis.Redis.from_url(settings.REDIS_URL)
     log.info("worker listening on %s", url)
-    while not stop["now"]:
-        process_once(client, url, cache)
+    run(client, url, cache, stop)
 
 
 if __name__ == "__main__":

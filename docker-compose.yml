@@ -6,6 +6,9 @@
 #   - .env holds REDIS_URL (your Upstash URL)
 #   - `aws login --profile payce-fde` is current; ~/.aws is mounted into the containers
 #   - the dev queues exist: python scripts/create_dev_queues.py
+#
+# Optional, offline: a local SQS stand-in (ElasticMQ). Set SQS_ENDPOINT_URL in .env, then
+#   docker compose --profile local-queue up -d --build --wait
 
 x-python-env: &python-env
   PAYNEST_REGION: demo
@@ -13,6 +16,8 @@ x-python-env: &python-env
   REDIS_URL: ${REDIS_URL:?set REDIS_URL (Upstash) in .env}
   SQS_QUEUE_NAME: ${SQS_QUEUE_NAME:-paynest-dev-tickets-in}
   AWS_PROFILE: ${AWS_PROFILE:-payce-fde}
+  # Empty = real SQS. If .env sets SQS_ENDPOINT_URL, containers use the elasticmq service.
+  SQS_ENDPOINT_URL: ${SQS_ENDPOINT_URL:+http://elasticmq:9324}
 
 x-aws-credentials: &aws-credentials
   # Read-write: `aws login` credentials are refreshed in ~/.aws/login/cache.
@@ -31,6 +36,20 @@ services:
       test: ["CMD-SHELL", "pg_isready -U paynest"]
       interval: 3s
       retries: 20
+
+  elasticmq:                    # OPTIONAL local SQS stand-in; only with --profile local-queue
+    image: softwaremill/elasticmq-native
+    profiles: ["local-queue"]
+    ports: ["9324:9324"]                # SQS-compatible API
+    volumes: ["./infra/local/elasticmq.conf:/opt/elasticmq.conf:ro"]
+
+  elasticmq-ui:                 # OPTIONAL queue browser for elasticmq; open http://localhost:9326
+    image: softwaremill/elasticmq-ui
+    profiles: ["local-queue"]
+    environment:
+      SQS_ENDPOINT: http://elasticmq:9324
+    ports: ["9326:3000"]                # 3000 inside; 9326 on your laptop (3000 is the web app)
+    depends_on: [elasticmq]
 
   api:
     build: .
@@ -51,6 +70,7 @@ services:
     command: python -m worker.main
     environment: *python-env
     volumes: *aws-credentials
+    restart: unless-stopped     # come back after a crash or a Docker restart
     depends_on:
       api: {condition: service_healthy}
 
@@ -69,7 +89,7 @@ services:
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 3s
       retries: 20
 

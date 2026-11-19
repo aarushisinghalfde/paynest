@@ -1,7 +1,7 @@
 """Worker behaviour with an in-memory queue: no Docker, no AWS."""
 import json
 
-from worker.main import PROCESSED_KEY, handle, process_once
+from worker.main import PROCESSED_KEY, handle, process_once, run
 
 
 class FakeQueue:
@@ -58,3 +58,24 @@ def test_failed_message_is_left_for_redelivery(monkeypatch):
 
 def test_empty_queue_returns_zero():
     assert process_once(FakeQueue([]), "url", wait_seconds=0) == 0
+
+
+def test_queue_outage_is_retried_not_fatal():
+    """A restart of the queue (e.g. ElasticMQ recreated) must not kill the worker."""
+    stop = {"now": False}
+    pauses = []
+
+    class FlakyQueue(FakeQueue):
+        calls = 0
+
+        def receive_message(self, **kw):
+            FlakyQueue.calls += 1
+            if FlakyQueue.calls <= 2:
+                raise ConnectionError("queue down")
+            stop["now"] = True
+            return super().receive_message(**kw)
+
+    q = FlakyQueue([json.dumps({"ticket": 1})])
+    run(q, "url", None, stop, sleep=pauses.append)
+    assert pauses == [1.0, 2.0]   # backs off, then recovers
+    assert q.deleted == ["r0"]

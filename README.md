@@ -17,6 +17,7 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 | Postgres + pgvector | Local Docker container | Fast to reset; RDS in Sydney from phase 2 |
 | Redis (cache) | **Upstash**, locally and in production | Free tier covers the pilot; same `REDIS_URL` everywhere |
 | Queue | **Amazon SQS in Sydney**: `paynest-dev-tickets-in` + `paynest-dev-tickets-dlq` | The real service; free tier covers the pilot |
+| Queue, offline (optional) | Local **ElasticMQ** container, same queue names | Work without AWS; same code, only `SQS_ENDPOINT_URL` changes |
 | API, worker, mock payroll API, web | Local Docker containers | Deployed to AWS in phase 2 |
 
 ## Layout
@@ -31,7 +32,7 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 | `db/migrations/` | Plain SQL files, applied in order by `scripts/migrate.py` | 1+ |
 | `config/regions/` | `demo.yaml` (Sydney, built); `india.yaml`, `uae.yaml` (placeholders) | 1 |
 | `config/models.yaml` | Provider and model ladder, cheapest first | 1 |
-| `infra/` | Terraform from phase 2 | 2 |
+| `infra/` | `local/elasticmq.conf` (optional local queue); Terraform from phase 2 | 1–2 |
 | `scripts/phase0/` | AWS account and day-1 checks | 0 |
 | `scripts/create_dev_queues.py` | Creates the dev SQS queues in Sydney | 1 |
 | `scripts/migrate.py` | Applies `db/migrations/*.sql`, each once | 1 |
@@ -70,6 +71,10 @@ python scripts\check_phase1.py
 | http://localhost:8000/health and `/ready` | API |
 | http://localhost:3000/chat and `/review` | Web |
 | http://localhost:8081/health | Mock payroll API |
+
+**Offline, without AWS:** set `SQS_ENDPOINT_URL=http://localhost:9324` in `.env` and start
+with `docker compose --profile local-queue up -d --build --wait`. ElasticMQ creates the same
+two queues; browse them at http://localhost:9326. Clear the setting to go back to real SQS.
 
 Stop with `docker compose down` (add `-v` to also wipe the local database). The
 containers use your `aws login` session; when it expires, sign in again and run
