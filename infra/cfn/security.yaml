@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest security. Security groups (who may connect to what) and the KMS key that
+  encrypts RDS, SQS and the SSM secrets. Needs the network stack (imports its VPC).
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CloudFrontPrefixListId:
+    Type: String
+    AllowedPattern: '^pl-[0-9a-f]+$'
+    Description: >-
+      AWS-managed list of CloudFront's origin-facing IP ranges in this region.
+      cfn.ps1 looks it up automatically ("auto:cloudfront" in the params file).
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # EC2: only CloudFront may connect, on port 80. No SSH port at all: admin access
+  # goes through SSM Session Manager, which needs no inbound rule.
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Paynest EC2 - HTTP from CloudFront only, no SSH (use SSM)
+      VpcId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-VpcId"
+      SecurityGroupIngress:
+        - Description: HTTP from CloudFront origin-facing servers only
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+      SecurityGroupEgress:
+        - Description: Outbound to SQS, KMS, SSM, ECR, OpenRouter, Upstash, AgentCore
+          IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-ec2-sg" }
+
+  # RDS: only machines in the EC2 security group may connect, on 5432.
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Paynest RDS - Postgres from the EC2 security group only
+      VpcId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-VpcId"
+      SecurityGroupIngress:
+        - Description: Postgres from the Paynest EC2 only
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref Ec2SecurityGroup
+      SecurityGroupEgress:
+        # The database never starts connections. AWS requires at least one egress rule
+        # to replace the default "allow all", so this one points at localhost (no effect).
+        - Description: No outbound traffic
+          IpProtocol: "-1"
+          CidrIp: 127.0.0.1/32
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-rds-sg" }
+
+  # One customer-managed key for RDS, SQS and SSM SecureStrings (about USD 1 a month).
+  KmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "${Project}-${Env} data key (RDS, SQS, SSM)"
+      EnableKeyRotation: true
+      PendingWindowInDays: 7            # a deleted key can be recovered for 7 days
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Lets IAM policies in this account grant use of the key (the standard default).
+          - Sid: EnableIamPolicies
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-key" }
+
+  KmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Project}-${Env}"
+      TargetKeyId: !Ref KmsKey
+
+Outputs:
+  Ec2SecurityGroupId:
+    Value: !Ref Ec2SecurityGroup
+    Export: { Name: !Sub "${Project}-${Env}-Ec2SecurityGroupId" }
+  RdsSecurityGroupId:
+    Value: !Ref RdsSecurityGroup
+    Export: { Name: !Sub "${Project}-${Env}-RdsSecurityGroupId" }
+  KmsKeyArn:
+    Value: !GetAtt KmsKey.Arn
+    Export: { Name: !Sub "${Project}-${Env}-KmsKeyArn" }
+  KmsAlias:
+    Value: !Ref KmsAlias
+    Export: { Name: !Sub "${Project}-${Env}-KmsAlias" }

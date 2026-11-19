@@ -9,6 +9,8 @@
     .\scripts\cfn.ps1 events network       # show recent failures, if a deploy failed
     .\scripts\cfn.ps1 delete network       # delete the stack (asks you to type its name)
 
+  Stacks, in deploy order: network, security (more follow in phase 2).
+
   Stack "network" uses infra\cfn\network.yaml and is called paynest-demo-network.
   -Target india or uae uses the placeholder params; the templates refuse to deploy them.
 
@@ -76,6 +78,20 @@ function Get-PendingChangeSet {
   return $name
 }
 
+function Resolve-ParamValue {
+  # "auto:..." values are looked up in AWS, so the params files hold no IDs that differ by region.
+  param([string]$Value)
+  if ($Value -eq "auto:cloudfront") {
+    $id = Get-Text @("ec2", "describe-managed-prefix-lists", "--region", $region,
+      "--filters", "Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing",
+      "--query", "PrefixLists[0].PrefixListId", "--output", "text")
+    if (-not $id -or $id -eq "None") { throw "Could not find the CloudFront prefix list in $region." }
+    Write-Host "CloudFront origin-facing prefix list in ${region}: $id" -ForegroundColor DarkGray
+    return $id
+  }
+  return $Value
+}
+
 function Get-StackStatus {
   return Get-Text (@("cloudformation", "describe-stacks") + $common + @("--query", "Stacks[0].StackStatus", "--output", "text"))
 }
@@ -107,7 +123,7 @@ switch ($Action) {
     $overrides = @()
     if ($declared -contains "Env") { $overrides += "Env=$Target" }
     foreach ($p in $config.parameters.PSObject.Properties) {
-      if ($declared -contains $p.Name) { $overrides += "$($p.Name)=$($p.Value)" }
+      if ($declared -contains $p.Name) { $overrides += "$($p.Name)=$(Resolve-ParamValue $p.Value)" }
     }
 
     $deployArgs = @("cloudformation", "deploy", "--template-file", $template) + $common + @(

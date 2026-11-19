@@ -3,6 +3,7 @@
   "region": "me-central-1",
   "parameters": {
     "Deployable": "false",
-    "VpcCidr": "10.40.0.0/16"
+    "VpcCidr": "10.40.0.0/16",
+    "CloudFrontPrefixListId": "auto:cloudfront"
   }
 }

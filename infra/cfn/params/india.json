@@ -3,6 +3,7 @@
   "region": "ap-south-1",
   "parameters": {
     "Deployable": "false",
-    "VpcCidr": "10.30.0.0/16"
+    "VpcCidr": "10.30.0.0/16",
+    "CloudFrontPrefixListId": "auto:cloudfront"
   }
 }
