@@ -42,7 +42,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub "${Project}-${Env}-db"
       Engine: postgres
-      EngineVersion: "17"
+      EngineVersion: "17.11"            # newest 17.x in Sydney (Nov 2026); minor patches still auto-apply
       DBInstanceClass: db.t4g.micro
       AllocatedStorage: "20"
       StorageType: gp3

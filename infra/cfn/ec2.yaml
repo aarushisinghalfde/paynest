@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest server. One EC2 t4g.small (Amazon Linux 2023, arm64) in a public subnet with
+  an Elastic IP. At boot it installs Docker, and a systemd service ("paynest") reads the
+  secrets from SSM and Secrets Manager into memory (/run), pulls the images from ECR and
+  starts the compose stack (api, worker, mock payroll API, web on port 80). No SSH:
+  use SSM Session Manager. Needs the network, security, data, iam and rds stacks.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.small, t4g.medium]
+  # Latest Amazon Linux 2023 for arm64, looked up by AWS at plan time. When AWS publishes
+  # a newer image, a plan shows the Instance as "Replace": review before applying.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # Lets the EC2 role read the database password (created by the rds stack).
+  ReadDbSecretPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Select
+        - 2
+        - !Split
+          - "/"
+          - !ImportValue
+            Fn::Sub: "${Project}-${Env}-Ec2RoleArn"
+      PolicyName: paynest-read-db-secret
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !ImportValue
+              Fn::Sub: "${Project}-${Env}-DbSecretArn"
+
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: ReadDbSecretPolicy
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Select
+        - 0
+        - !Split
+          - ","
+          - !ImportValue
+            Fn::Sub: "${Project}-${Env}-PublicSubnetIds"
+      SecurityGroupIds:
+        - !ImportValue
+          Fn::Sub: "${Project}-${Env}-Ec2SecurityGroupId"
+      IamInstanceProfile: !ImportValue
+        Fn::Sub: "${Project}-${Env}-Ec2InstanceProfileName"
+      MetadataOptions:
+        HttpTokens: required             # IMDSv2 only
+        HttpPutResponseHopLimit: 2       # lets containers reach the instance role credentials
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            KmsKeyId: !ImportValue
+              Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+            DeleteOnTermination: true
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-server" }
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            # Runs once, at first boot. Logs: /var/log/cloud-init-output.log
+            set -euxo pipefail
+
+            # The Elastic IP is attached a few seconds after boot; wait for internet access.
+            for i in $(seq 1 60); do curl -fsS --max-time 5 https://aws.amazon.com >/dev/null && break; sleep 5; done
+
+            dnf install -y docker
+            systemctl enable --now docker
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64 \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+            mkdir -p /opt/paynest
+
+            # Non-secret settings (no passwords here).
+            cat > /opt/paynest/settings <<'CONF'
+            ENV=${Env}
+            REGION=${AWS::Region}
+            REGISTRY=${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+            SSM_PATH=/${Project}/${Env}
+            DB_HOST=${DbHost}
+            DB_PORT=${DbPort}
+            DB_NAME=paynest
+            DB_SECRET_ARN=${DbSecretArn}
+            QUEUE_NAME=${QueueName}
+            CONF
+
+            # Builds the app environment from SSM + Secrets Manager. Output goes to /run
+            # (memory only, wiped at every stop), never to disk.
+            cat > /opt/paynest/fetch_env.py <<'PY'
+            import json, subprocess, urllib.parse
+            s = dict(l.strip().split("=", 1) for l in open("/opt/paynest/settings") if "=" in l)
+            def aws(*args):
+                out = subprocess.check_output(["aws", *args, "--region", s["REGION"], "--output", "json"])
+                return json.loads(out)
+            params = aws("ssm", "get-parameters-by-path", "--path", s["SSM_PATH"], "--with-decryption")["Parameters"]
+            env = {p["Name"].rsplit("/", 1)[1]: p["Value"] for p in params}
+            secret = json.loads(aws("secretsmanager", "get-secret-value", "--secret-id", s["DB_SECRET_ARN"])["SecretString"])
+            user = urllib.parse.quote(secret["username"], safe="")
+            password = urllib.parse.quote(secret["password"], safe="")
+            env["DATABASE_URL"] = "postgresql://%s:%s@%s:%s/%s?sslmode=require" % (user, password, s["DB_HOST"], s["DB_PORT"], s["DB_NAME"])
+            env["PAYNEST_REGION"] = s["ENV"]
+            env["SQS_QUEUE_NAME"] = s["QUEUE_NAME"]
+            env["AWS_REGION"] = s["REGION"]
+            env["AWS_DEFAULT_REGION"] = s["REGION"]
+            for k, v in env.items():
+                print("%s=%s" % (k, v))
+            PY
+
+            cat > /opt/paynest/fetch-env.sh <<'SH'
+            #!/bin/bash
+            set -euo pipefail
+            umask 077
+            mkdir -p /run/paynest
+            python3 /opt/paynest/fetch_env.py > /run/paynest/app.env
+            SH
+            chmod 700 /opt/paynest/fetch-env.sh
+
+            # Production compose: same services as the laptop, minus Postgres (RDS) and
+            # minus ~/.aws (containers use the instance role).
+            cat > /opt/paynest/docker-compose.yml <<'YML'
+            x-app: &app
+              image: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Project}-${Env}/app:latest
+              env_file: [/run/paynest/app.env]
+              restart: unless-stopped
+            services:
+              api:
+                <<: *app
+                command: sh -c "python scripts/migrate.py && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+                healthcheck:
+                  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+                  interval: 5s
+                  retries: 30
+              worker:
+                <<: *app
+                command: python -m worker.main
+                depends_on:
+                  api: {condition: service_healthy}
+              mock-payroll-api:
+                <<: *app
+                command: uvicorn app:app --app-dir mock-payroll-api --host 0.0.0.0 --port 8081
+              web:
+                image: ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Project}-${Env}/web:latest
+                ports: ["80:80"]
+                restart: unless-stopped
+                depends_on:
+                  api: {condition: service_healthy}
+            YML
+
+            # systemd service: runs at every boot (also after stop/start), retries every
+            # minute until the images exist in ECR.
+            cat > /etc/systemd/system/paynest.service <<'UNIT'
+            [Unit]
+            Description=Paynest compose stack
+            Requires=docker.service
+            After=docker.service network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            WorkingDirectory=/opt/paynest
+            EnvironmentFile=/opt/paynest/settings
+            ExecStartPre=/opt/paynest/fetch-env.sh
+            ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REGISTRY'
+            ExecStartPre=/usr/bin/docker compose pull
+            ExecStart=/usr/bin/docker compose up -d --remove-orphans
+            ExecStop=/usr/bin/docker compose down
+            Restart=on-failure
+            RestartSec=60
+            TimeoutStartSec=900
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            systemctl daemon-reload
+            systemctl enable paynest.service
+            systemctl start paynest.service || echo "paynest.service will retry until the images are in ECR"
+          - DbHost: !ImportValue
+              Fn::Sub: "${Project}-${Env}-DbEndpoint"
+            DbPort: !ImportValue
+              Fn::Sub: "${Project}-${Env}-DbPort"
+            DbSecretArn: !ImportValue
+              Fn::Sub: "${Project}-${Env}-DbSecretArn"
+            QueueName: !ImportValue
+              Fn::Sub: "${Project}-${Env}-TicketsQueueName"
+
+  # Fixed public IP, so CloudFront's origin address survives stop/start.
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-ip" }
+
+  ElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ElasticIp.AllocationId
+      InstanceId: !Ref Instance
+
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+    Export: { Name: !Sub "${Project}-${Env}-InstanceId" }
+  ElasticIp:
+    Value: !Ref ElasticIp
+    Export: { Name: !Sub "${Project}-${Env}-ElasticIp" }
