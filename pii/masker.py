@@ -17,7 +17,7 @@ Over-masking is preferred to leaking: an unknown long number is masked as <ACCOU
 import re
 from dataclasses import dataclass, field
 
-from pii import presidio_layer
+from pii import names, presidio_layer
 from pii.normalize import normalize_digits
 from pii.validators import IFSC_RE, PAN_RE, iban_valid, is_aadhaar, is_emirates_id
 
@@ -39,7 +39,7 @@ AADHAAR_CONTEXT_RE = re.compile(r"(?i:\baadhaa?r\b|आधार)")
 
 LATIN_NAME = r"[A-Z][a-z]+(?:[ \-][A-Z][a-z]+){0,2}"
 DEVA_NAME = r"[\u0900-\u097F]+(?: [\u0900-\u097F]+)?"
-ARAB_NAME = r"[\u0621-\u064A]+(?: [\u0621-\u064A]+)?"
+ARAB_NAME = r"(?!ال)[\u0621-\u064A]+(?: [\u0621-\u064A]+)?"   # a first name never starts with ال
 
 NAME_PATTERNS = [
     # English and Hinglish
@@ -87,6 +87,45 @@ COMMON_CAPS = {
     "june", "july", "august", "september", "october", "november", "december", "monday", "tuesday",
     "wednesday", "thursday", "friday", "saturday", "sunday",
 }
+
+COMMON_CAPS |= {  # common sentence starters (English and Hinglish)
+    "later", "then", "after", "before", "since", "now", "again", "still", "only", "just", "however",
+    "meanwhile", "actually", "recently", "currently", "unfortunately", "finally", "earlier", "last",
+    "next", "every", "each", "all", "some", "any", "my", "your", "his", "her", "their", "its", "you",
+    "she", "they", "there", "here", "if", "so", "as", "for", "from", "about", "regarding", "attached",
+    "note", "update", "request", "issue", "query", "problem", "okay", "sorry", "yes", "sure", "good",
+    "morning", "evening", "afternoon", "not", "unable", "need", "want", "while", "where", "which",
+    "aur", "lekin", "phir", "abhi", "mujhe", "hum", "aap", "kya", "kyun", "kab", "agar", "isliye",
+}
+COMMON_CAPS |= {"aadhaar", "iban", "pan", "uan", "ifsc", "hindi", "arabic", "english", "rupees",
+                "dirhams", "hrms", "excel", "google", "microsoft", "whatsapp", "slack", "teams", "company",
+                "office", "admin", "accounts", "department", "portal", "system", "app", "client", "vendor"}
+
+# One capitalised word in a slot only a person fills.
+_W = r"([A-Z][a-z]{2,})"
+CUE_PATTERNS = [
+    re.compile(r"(?i:\b(?:ask|tell|told|with|cc|ping|contact|inform|remind|meet|met|thank|thanked))\s+" + _W
+               + r"(?![A-Za-z])"),
+    re.compile(_W + r"\s+(?i:said|says|told|asked|mentioned|wrote|confirmed|joined|resigned|approved|"
+               r"replied|called|shared|sent|promised)\b"),
+    re.compile(_W + r"'s\b"),
+    re.compile(_W + r"\s+(?:ne|ka|ki|ke|ko|se|ji|bhai|sir|madam|sahab)\b"),
+]
+DEVA_WORD = re.compile(r"(?<![\u0900-\u097F])[\u0900-\u097F]+(?![\u0900-\u097F])")
+ARAB_WORD = re.compile(r"(?<![\u0621-\u064A])[\u0621-\u064A]+(?![\u0621-\u064A])")
+ARAB_PREFIXES = ("وال", "بال", "لل", "ال", "و", "ب", "ل")
+
+
+def _arabic_names(text: str) -> list[str]:
+    """Arabic first names from the list, also with an attached prefix (وخالد, لخالد)."""
+    found = []
+    for m in ARAB_WORD.finditer(text):
+        w = m.group()
+        for cand in [w] + [w[len(p):] for p in ARAB_PREFIXES if w.startswith(p)]:
+            if cand in names.ARABIC:
+                found.append(cand)
+                break
+    return found
 
 PRIORITY = {"EMAIL": 0, "IBAN": 1, "EMIRATES_ID": 2, "AADHAAR": 3, "UAN": 3, "PAN": 4, "IFSC": 4,
             "PHONE": 5, "ACCOUNT": 6, "NAME": 7}
@@ -181,6 +220,16 @@ def _name_variants(sender_name: str | None, text: str,
             words.pop()
         if len(words) >= 2 and not any(w.lower() in COMMON_CAPS for w in words):
             people.append(" ".join(words))
+    # single first names last, so a full name found above keeps its token ("Ananya" -> Ananya Iyer)
+    for rx in CUE_PATTERNS:
+        for m in rx.finditer(text):
+            if m.group(1).lower() not in COMMON_CAPS:
+                people.append(m.group(1))
+    for m in re.finditer(r"(?<![A-Za-z])([A-Z][a-z]{2,})(?![A-Za-z])", text):
+        if m.group(1).lower() in names.LATIN and m.group(1).lower() not in COMMON_CAPS:
+            people.append(m.group(1))
+    people += [m.group() for m in DEVA_WORD.finditer(text) if m.group() in names.DEVANAGARI]
+    people += _arabic_names(text)
     variants: list[tuple[str, str]] = []
     seen: set[str] = set()
     for person in people:
@@ -198,10 +247,17 @@ def _name_spans(text: str, sender_name: str | None, extra_people: list[str] | No
     for name, person in _name_variants(sender_name, text, extra_people):
         if re.fullmatch(r"[A-Za-z\- ]+", name):
             rx = re.compile(r"(?<![A-Za-z])" + re.escape(name) + r"(?![a-z])", re.IGNORECASE)
+        elif re.search(r"[\u0621-\u064A]", name):
+            # Arabic: whole word, optionally with an attached prefix (و ب ل ال), so علي does not
+            # match inside عليه
+            rx = re.compile(r"(?<![\u0621-\u064A])(?:وال|بال|لل|ال|و|ب|ل)?(" + re.escape(name)
+                            + r")(?![\u0621-\u064A])")
         else:
-            rx = re.compile(re.escape(name))   # Devanagari / Arabic: attached prefixes are allowed
+            # Devanagari: whole word (vowel signs are part of the letter range)
+            rx = re.compile(r"(?<![\u0900-\u097F])(" + re.escape(name) + r")(?![\u0900-\u097F])")
         for m in rx.finditer(text):
-            spans.append(_Span(m.start(), m.end(), "NAME", person))
+            g = 1 if rx.groups else 0          # mask the name, keep an Arabic prefix
+            spans.append(_Span(m.start(g), m.end(g), "NAME", person))
     return spans
 
 

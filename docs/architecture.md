@@ -198,7 +198,12 @@ flowchart LR
   that are not common or payroll words, e.g. "Ananya Iyer") and by spaCy (`en_core_web_sm`)
   through Presidio. The first CI run showed spaCy alone missed 3 of 12 Indian names and
   tagged "Email" as a person, so the rule is part of the gate; 12 extra seeded tickets
-  test it. Hindi and Arabic names rely on the script-specific rules.
+  test it.
+- **Single first names** ("Gaurav will send it", "Kal Zubair ne bola", "مع سلطان") are found
+  by context cues (ask/with/said/'s, Hinglish ne/ka/ko/ji) and a list of common Indian and
+  Arab first names in Latin, Devanagari and Arabic script (`pii/names.py`). Names that are
+  also everyday words (निधि as in भविष्य निधि, مبارك, عمر "age") are excluded, and a
+  precision test checks that ordinary sentences in all four languages come back unchanged.
 - **Same value, same token** within a ticket (`<NAME_1>` everywhere), so agents can still
   follow the conversation.
 - `PII_NER=auto|required|off` controls the Presidio layer (`required` in the worker image).
