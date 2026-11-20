@@ -13,6 +13,62 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 **Models:** OpenRouter stands in until AWS lifts the Bedrock hold on the account
 (phase 0 outcome).
 
+## Links
+
+Everything runs in Sydney (`ap-southeast-2`), AWS profile `payce-fde`. No secrets here:
+they live in your `.env` and in SSM under `/paynest/demo/`.
+
+**Demo app** (up only while the demo EC2 and RDS are running)
+
+| Page | Link |
+| --- | --- |
+| Home | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com |
+| Customer chat | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/chat |
+| Reviewer console | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/review (paste `ADMIN_TOKEN` from `.env`) |
+| Health | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/health |
+
+**Code**
+
+| What | Link |
+| --- | --- |
+| Repo | https://github.com/aarushisinghalfde/paynest |
+| CI and image builds | https://github.com/aarushisinghalfde/paynest/actions |
+| Tags (current release v0.3.0) | https://github.com/aarushisinghalfde/paynest/tags |
+
+**AWS console**
+
+| What | Link |
+| --- | --- |
+| CloudFormation stacks | https://ap-southeast-2.console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks |
+| Demo EC2 instance | https://ap-southeast-2.console.aws.amazon.com/ec2/home?region=ap-southeast-2#InstanceDetails:instanceId=i-038b0f4a1eee1c90e |
+| App logs (`/paynest/demo/app`) | https://ap-southeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-southeast-2#logsV2:log-groups/log-group/$252Fpaynest$252Fdemo$252Fapp |
+| Alarms | https://ap-southeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-southeast-2#alarmsV2: |
+| SSM parameters | https://ap-southeast-2.console.aws.amazon.com/systems-manager/parameters/?region=ap-southeast-2 |
+| SSM Run Command history | https://ap-southeast-2.console.aws.amazon.com/systems-manager/run-command/executed-commands?region=ap-southeast-2 |
+| API Gateway | https://ap-southeast-2.console.aws.amazon.com/apigateway/main/apis?region=ap-southeast-2 |
+| SQS queues | https://ap-southeast-2.console.aws.amazon.com/sqs/v3/home?region=ap-southeast-2#/queues |
+| DynamoDB (PII vault) | https://ap-southeast-2.console.aws.amazon.com/dynamodbv2/home?region=ap-southeast-2#tables |
+| Vault reveal Lambda | https://ap-southeast-2.console.aws.amazon.com/lambda/home?region=ap-southeast-2#/functions/paynest-demo-vault-reveal |
+| RDS | https://ap-southeast-2.console.aws.amazon.com/rds/home?region=ap-southeast-2#databases: |
+
+**Deploy and operate** (PowerShell, from the repo root)
+
+```powershell
+# Release: tag a version; images.yml builds the images
+git tag vX.Y.Z; git push origin vX.Y.Z
+# Secrets from .env into SSM
+.\scripts\put_secrets.ps1
+# Restart the app on the EC2 (pulls the images, runs migrations)
+aws ssm send-command --profile payce-fde --region ap-southeast-2 --instance-ids i-038b0f4a1eee1c90e --document-name AWS-RunShellScript --parameters "commands=['systemctl restart paynest']"
+# Load the case data (phase 4) and run the gates
+$env:AWS_PROFILE = "payce-fde"; python scripts\run_phase4.py
+python scripts\check_phase3.py; python scripts\check_phase4.py; python scripts\check_phase5.py
+# Infra changes: always plan, review, then apply
+.\scripts\cfn.ps1 plan <stack>; .\scripts\cfn.ps1 apply <stack>
+# Stop the demo when idle
+.\scripts\demo.ps1 stop
+```
+
 ## What runs where
 
 | Piece | Where | Why |
@@ -50,8 +106,8 @@ regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder co
 
 Two ways to look at Paynest:
 
-1. **Live demo:** open the CloudFront URL shared with you (from the end of phase 2). It is
-   up only while the demo EC2 and RDS are running, so agree a time with the owner.
+1. **Live demo:** open https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/chat (see **Links** above). It is up only while the demo
+   EC2 and RDS are running, so agree a time with the owner.
 2. **On your own laptop:** clone the repo and follow **Run it** below with your own
    `.env`. You never need the owner's secrets or AWS account: use your own free Upstash
    Redis URL, and the offline queue (`SQS_ENDPOINT_URL=http://localhost:9324` with
