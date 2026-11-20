@@ -5,8 +5,18 @@ by rules, draft replies from approved sources, check every reply, and put a huma
 loop for statutory answers. Built phase by phase; each phase ends at a gate recorded in
 `results/gates.csv`.
 
-**Architecture:** see [docs/architecture.md](docs/architecture.md) for diagrams, the AWS
-stacks, request/data/release flows, security controls, cost and the decision log.
+**Docs:**
+
+| Doc | What it covers |
+| --- | --- |
+| [Discovery note](docs/paynest_Discovery_Note.md) | The problem in the client's words, evidence, cost, ranked shortlist |
+| [SPIN sheet](docs/paynest_SPIN_Sheet.md) | Stakeholders, pressures, constraints, success criteria, question funnel |
+| [PRD](docs/paynest_PRD.md) | Goals, users, scope, functional and non-functional requirements, metrics, rollout |
+| [Solution approach](docs/solution_approach.md) | What we build and why, workflow, where code stops and models start |
+| [Architecture](docs/architecture.md) | Diagrams, AWS stacks, request/data/release flows, security, cost, decision log |
+| [LLD](docs/lld.md) | Stage-by-stage design, sequence diagram, failure behaviour |
+| [Build note](docs/build_note.md) | Code vs model table, patterns, models, cost line, what broke |
+| [Presentation](docs/Payce_Support_Assist_build_review.pptx) | Build review deck (11 slides) |
 
 **Build region:** Sydney (`ap-southeast-2`), account Agentic Core FDE. Production
 regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder config.

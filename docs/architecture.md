@@ -1,9 +1,12 @@
 # Paynest architecture
 
-Status as of **20 Nov 2026, evening**: phases 0 and 1 done; phase 2 (AWS foundation) is
-**live in Sydney** at https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com
-(the phase 2 gate script is still to come). This file describes what is built, what is planned, and why. Diagrams are
-Mermaid and render on GitHub.
+Status as of **20 Nov 2026, night**: phases 0-7 **live in Sydney** at
+https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com (gates: phase 3 12/12, phase 4 all
+pass, phase 5 4/4); phases 8-9 and the How-To conversation flow in code and released as
+v0.4.2. This file describes what is built, what is planned, and why. Diagrams are Mermaid and
+render on GitHub. Companion docs: [PRD](paynest_PRD.md), [discovery note](paynest_Discovery_Note.md),
+[SPIN sheet](paynest_SPIN_Sheet.md), [solution approach](solution_approach.md), [LLD](lld.md),
+[build note](build_note.md), [presentation](Payce_Support_Assist_build_review.pptx).
 
 Paynest (Payce Support Assist) is a support-ticket assistant for a payroll provider with
 India and UAE tenants. Every ticket is PII-masked first, classified and routed by rules,
@@ -309,6 +312,54 @@ flowchart LR
   `me-central-1`); the demo table sends all to Sydney, the production table to the home
   region. A load refuses to run in a region its table sends no tenant to.
 
+### The agent (phases 5-9, `agent/`, `worker/`)
+
+```mermaid
+flowchart LR
+    G[pii_gate] --> N[normalise<br/>language, injection,<br/>greeting / vague, follow-up]
+    N --> T[resolve_tenant<br/>IN or UAE]
+    T --> C[classify<br/>keywords -> similar -> model]
+    C --> D[dedupe<br/>duplicate, incident, Jira]
+    D --> R{route<br/>config/router.yaml}
+    R -->|chat / ask / block /<br/>incident / duplicate| TPL[template]
+    R -->|reply How-To| HC{answer cache}
+    HC -->|hit| GU
+    HC -->|miss| RAG[guide titles +<br/>run status]
+    R -->|review: statutory, P1, Jira| ALL[all sources +<br/>dated rates + tools]
+    RAG --> DR[draft<br/>model or cited fallback]
+    ALL --> DR
+    TPL --> GU[output guard<br/>11 checks]
+    DR --> GU
+    GU -->|pass, auto route| S[send + cache]
+    GU -->|review route or fail| RV[review console]
+```
+
+- **Checkpointed graph:** LangGraph + `PostgresSaver` (thread id = ticket id). A crashed worker
+  resumes at the failed node; `sent_replies` is unique on (ticket, version), so nothing is sent twice.
+- **Classifier (phase 6):** keywords in EN/Hinglish/HI/AR, then similar past tickets (character
+  TF-IDF kNN on the loaded, masked tickets), then a model only on disagreement (OpenRouter,
+  cost ledger, USD 0.50/day cap). How-to phrasing with no problem signal goes to How-To.
+- **Dedupe and routing (phase 7):** duplicate = explicit reference, or resubmit marker and
+  similarity >= 0.8; incident = 5 similar in 3 h; Jira by word containment. YAML router, first
+  match wins, rule id and reason stored and shown. Injection phrasing in 4 languages is blocked.
+- **Answering (phase 8):** question date from the text (ISO date or month) else the ticket date;
+  retrieval filtered by tenant region and validity on that date (BM25 + character trigrams,
+  Arabic/Hindi glossary). Tools: `get_rate` by date, `get_run_status` (429-aware),
+  `get_tenant_profile`, `get_incident`. Auto-sent replies cite guide titles and run status only;
+  statutory figures only on the review route.
+- **How-To conversation:** each chat page has a `conversation_id` (migration 006); a short
+  follow-up or the answer to a clarifying question is read with the earlier turn. How-To answers
+  come from the **answer cache** first (Redis, matched by meaning, keyed by region, language and
+  KB version), then from the guides; a guarded answer is cached for the next asker.
+- **Output guard (phase 9):** empty/too long, PII, unknown token, bad citation, ungrounded number,
+  uncited answer, wrong region, superseded source, instruction leak, promise, wrong language.
+  Planted set: 20/20 bad caught, 10/10 good passed. A failed draft goes to review, never out.
+- **Customer view (phase 10 part):** replies are stored masked; the API removes tokens and
+  citation ids before the customer sees them. Real values would come only through the audited
+  reveal Lambda in a production send adapter.
+- **Tracing (phase 11 part):** every node logs `node_done` with its time; OpenTelemetry spans
+  when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
 ---
 
 ## 6. Release flow (images)
@@ -417,19 +468,16 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observabili
 
 ## 11. What is next
 
-1. Done: release `v0.1.0`, `rds`, `ec2`, `apigw` (public URL).
-2. Done: `scripts/check_phase2.py` gate (11/11). Next: `deploy.ps1` (pinned image versions via SSM).
-3. CloudFront once AWS verifies the account (CloudFront, CodeBuild and Bedrock holds filed).
-4. Phase 3 in progress: 3a masking done (CI green); 3b-1 intake, worker gate, re-scan,
-   sender tokens, JSON logs and `eval_pii.py` written (not deployed). Next 3b-2 (needs
-   approval): `vault.yaml` and `observability.yaml` written, `ec2.yaml` user data updated,
-   `check_phase3.py` (12 checks) written; deploy steps in the handoff. Then 3c:
-   multilingual NER. **Do not release a new image before 3b-2:** the worker now refuses to
-   start without `PII_HMAC_KEY` and `VAULT_BACKEND`. **Phase 3 gate passed 12/12.**
-   Phase 4 written: loader, migration 003, `run_phase4.py`, `check_phase4.py` (needs image
-   v0.3.0). Next: relabel the 200-ticket set; phase 4b portal upload with admin login.
-5. Phase 4 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
-   AgentCore (phase 5).
+1. Done: phases 0-7 live (v0.3.0); phases 8-9, the How-To conversation flow and Arabic/Hindi
+   answers released as v0.4.2. Live check: `python scripts\check_chat.py` (8 cases).
+2. Phase 10: `cache` stack (ElastiCache Valkey, created only for demo days) to replace Upstash
+   for the answer cache; portal upload page for new data (admin login).
+3. Phase 11: `deploy.ps1` (tag -> wait for images -> restart -> health -> checks), X-Ray via an
+   ADOT collector, AgentCore runtime/gateway/policy.
+4. Phase 12: full evals on the relabelled 200-ticket set (`scripts/model_fit.py --record`, replay).
+5. Phase 13: demo script and handover.
+6. Known gaps: dedupe precision 93% (target 95%); the Meridian burst opened 2 incidents, not 1;
+   PNJ-4412 matched 16 of 48 tickets.
 
-Open items: free disk space on the laptop; Bedrock support case; `OPENROUTER_API_KEY` into
-SSM before phase 6; phase 3/4 data files still to be provided.
+Open items: alarm email; Bedrock/CloudFront account verification; delete the failed cloudfront
+stack; `demo.ps1 stop` when idle.
