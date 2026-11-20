@@ -1,0 +1,74 @@
+{
+  "ner_layer": "rules",
+  "tickets": 72,
+  "values": 408,
+  "recall": 1.0,
+  "recall_by_type": {
+    "AADHAAR": {
+      "recall": 1.0,
+      "n": 17
+    },
+    "ACCOUNT": {
+      "recall": 1.0,
+      "n": 26
+    },
+    "EMAIL": {
+      "recall": 1.0,
+      "n": 21
+    },
+    "EMIRATES_ID": {
+      "recall": 1.0,
+      "n": 14
+    },
+    "IBAN": {
+      "recall": 1.0,
+      "n": 15
+    },
+    "IFSC": {
+      "recall": 1.0,
+      "n": 3
+    },
+    "NAME": {
+      "recall": 1.0,
+      "n": 268
+    },
+    "PAN": {
+      "recall": 1.0,
+      "n": 11
+    },
+    "PHONE": {
+      "recall": 1.0,
+      "n": 26
+    },
+    "UAN": {
+      "recall": 1.0,
+      "n": 7
+    }
+  },
+  "recall_by_language": {
+    "ar": {
+      "recall": 1.0,
+      "n": 96
+    },
+    "en": {
+      "recall": 1.0,
+      "n": 116
+    },
+    "hi": {
+      "recall": 1.0,
+      "n": 95
+    },
+    "hi-Latn": {
+      "recall": 1.0,
+      "n": 101
+    }
+  },
+  "leaked_by_type": {},
+  "masked_spans": 238,
+  "false_positive_spans": 0,
+  "false_positive_rate": 0.0,
+  "clean_sentences": 30,
+  "clean_sentences_changed": 0,
+  "latency_ms_p50": 0.57,
+  "latency_ms_p95": 1.07
+}

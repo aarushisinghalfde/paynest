@@ -18,6 +18,11 @@ x-python-env: &python-env
   AWS_PROFILE: ${AWS_PROFILE:-payce-fde}
   # Empty = real SQS. If .env sets SQS_ENDPOINT_URL, containers use the elasticmq service.
   SQS_ENDPOINT_URL: ${SQS_ENDPOINT_URL:+http://elasticmq:9324}
+  # Phase 3 PII gate. The laptop keeps vault values in the worker's memory only;
+  # AWS uses VAULT_BACKEND=dynamo (DynamoDB + KMS, infra/cfn/vault.yaml).
+  PII_HMAC_KEY: ${PII_HMAC_KEY:-}
+  VAULT_BACKEND: ${VAULT_BACKEND:-memory}
+  PII_NER: ${PII_NER:-auto}
 
 x-aws-credentials: &aws-credentials
   # Read-write: `aws login` credentials are refreshed in ~/.aws/login/cache.

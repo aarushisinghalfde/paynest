@@ -45,7 +45,7 @@ def test_failed_message_is_left_for_redelivery(monkeypatch):
     q = FakeQueue([json.dumps({"ticket": 1}), json.dumps({"ticket": 2})])
     calls = []
 
-    def flaky(message, cache=None):
+    def flaky(message, cache=None, gate=None):
         calls.append(message["MessageId"])
         if message["MessageId"] == "m0":
             raise RuntimeError("boom")

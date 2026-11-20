@@ -187,7 +187,7 @@ flowchart LR
   P --> NM["Name rules<br/>sender, intros, sign-offs"]
   NM --> TK["Tokeniser<br/>value -> IBAN_1"]
   TK --> M["Masked ticket -> worker, agents"]
-  TK --> V["pii_vault (KMS, expires)<br/>planned 3b"]
+  TK --> V["Vault: DynamoDB + KMS<br/>3b-2, planned"]
 ```
 
 - **Our recognisers are the gate.** Aadhaar (Verhoeff), Emirates ID (Luhn), IBAN (mod-97),
@@ -207,6 +207,58 @@ flowchart LR
 - **Same value, same token** within a ticket (`<NAME_1>` everywhere), so agents can still
   follow the conversation.
 - `PII_NER=auto|required|off` controls the Presidio layer (`required` in the worker image).
+- **Known limit, and the standard fix:** checksum rules for IDs are industry practice; the
+  first-name list and cues are a stop-gap because `en_core_web_sm` is English-only and weak
+  on Indian names. Planned 3c: a multilingual transformer NER in Presidio as the main name
+  detector (list kept as backup), chosen by measured recall vs RAM. Amazon Comprehend PII
+  is English/Spanish only, so it cannot cover Hindi or Arabic.
+
+### Ticket intake and the gate (phase 3b, `api/`, `intake/`, `worker/`)
+
+```mermaid
+flowchart TD
+  C["POST /api/tickets"] --> API["API: validate"]
+  API --> IN["Postgres: tickets (received)<br/>+ ticket_inbox (raw, short-lived)"]
+  API --> Q["SQS: {ticket_id} only"]
+  Q --> W["Worker: PII gate"]
+  IN --> W
+  W --> MK["mask_ticket"]
+  MK --> RS{"Re-scan masked text"}
+  RS -->|"hit"| BL["status pii_blocked<br/>inbox kept for review, nothing vaulted"]
+  RS -->|"clean"| V["Vault put (append-only)<br/>DynamoDB + KMS"]
+  V --> SV["tickets: masked_body, pii_counts, sender tokens<br/>inbox row deleted (same transaction)"]
+```
+
+- **Raw text lives in one place, briefly.** `ticket_inbox` holds the body and sender
+  fields until the worker masks them; the same transaction that saves `masked_body`
+  deletes the inbox row. `GET /tickets/{id}` never returns raw text and shows the body
+  only once the gate has passed it.
+- **Re-scan before release.** The masked text is checked three ways: no vaulted value
+  survives (whole-word, so `علي` inside `عليه` is not a hit), the sender's email or phone
+  is not left in the text, and a second masking pass finds nothing. Any hit quarantines
+  the ticket as `pii_blocked` with reasons that name kinds only (`second_pass:PHONE`).
+- **Sender tokens.** `HMAC-SHA256(PII_HMAC_KEY, tenant | kind | normalised value)`: the
+  same sender in one tenant always gets the same `em_...` / `ph_...` token, different
+  tenants get different tokens, and the key lives in SSM. The raw sender fields go to the
+  vault as `<SENDER_NAME>`, `<SENDER_EMAIL>`, `<SENDER_PHONE>` for replies.
+- **Vault (decided 20 Nov: DynamoDB, not Postgres).** One item per value (`ticket_id`,
+  `token`), each encrypted with the vault KMS key and the encryption context
+  `{ticket_id, token, tenant_id}`, so KMS itself refuses a reveal for the wrong ticket.
+  Writes are conditional (append-only). TTL removes values after `VAULT_TTL_DAYS` (30).
+  EC2 role: `kms:Encrypt` + `dynamodb:PutItem` only. The `vault-reveal` Lambda (outside the
+  VPC, so no KMS endpoint is needed) is the only role with `GetItem` and `kms:Decrypt`.
+- **Retries are safe.** Values are vaulted before the masked row is saved; if the vault
+  write fails the inbox row stays and SQS redelivers. A redelivered message for a masked
+  ticket is skipped.
+- **Logs are JSON lines with ids, kinds, counts and timings, never values**
+  (`shared/logs.py`). Exceptions are logged as type + file:line only, because exception
+  messages can quote data (a Postgres error can include the failing row). Events:
+  `ticket_received`, `ticket_masked`, `pii_blocked`, `ticket_skipped`, `message_failed`.
+- **Evaluation:** `python scripts/eval_pii.py` reports recall per type and language,
+  over-masking (30 clean sentences in `tests/fixtures/pii_clean.json` plus unlabelled
+  spans) and latency; `--record` appends rows to `results/gates.csv`. On the synthetic
+  seed (rules only): 100% of 408 values, 0/30 clean sentences changed, p50 0.6 ms. This
+  proves the plumbing; real recall needs the phase 4 data.
 
 ---
 
@@ -273,6 +325,8 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **Images built by GitHub Actions on native ARM, on version tags** | CodeBuild was blocked by a new-account limit; GitHub ARM runners are native and free for public repos. |
 | 20 Nov | **API Gateway (HTTP API + VPC Link) as the public entry** | CloudFront is held until AWS verifies the new account; API Gateway gives an AWS HTTPS URL today, keeps the EC2 private, adds rate limiting. Switch to CloudFront later for WebSockets. |
 | 20 Nov | **PII: own recognisers as the gate, Presidio + spaCy `en_core_web_sm` for names** | Checksum-validated rules are deterministic and cover IDs Presidio lacks (Emirates ID, UAN, native digits); spaCy finds mid-sentence English and Hinglish names. The small model keeps RAM low on the t4g.small. |
+| 20 Nov | **PII vault in DynamoDB + KMS, not Postgres** | Lambda reaches it without a KMS VPC endpoint (about USD 7-8 a month saved); native TTL; the EC2 can write but never read; a dump of the app database leaks only masked text. |
+| 20 Nov | **Raw ticket text in a short-lived `ticket_inbox`, deleted when masked** | The worker masks (keeps spaCy out of the API); raw text is never in `tickets`, which everything else reads. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
 
 ---
@@ -300,8 +354,12 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `apigw` (or `c
 1. Done: release `v0.1.0`, `rds`, `ec2`, `apigw` (public URL).
 2. Done: `scripts/check_phase2.py` gate (11/11). Next: `deploy.ps1` (pinned image versions via SSM).
 3. CloudFront once AWS verifies the account (CloudFront, CodeBuild and Bedrock holds filed).
-4. Phase 3 in progress: 3a masking code and leak tests done; 3b HMAC sender tokens,
-   `pii_vault`, vault KMS key and the vault-reveal Lambda.
+4. Phase 3 in progress: 3a masking done (CI green); 3b-1 intake, worker gate, re-scan,
+   sender tokens, JSON logs and `eval_pii.py` written (not deployed). Next 3b-2 (needs
+   approval): `vault.yaml` (DynamoDB table, vault KMS key, vault-reveal Lambda), EC2 role
+   additions, CloudWatch logs + metric filters + alarms, `check_phase3.py`. Then 3c:
+   multilingual NER. **Do not release a new image before 3b-2:** the worker now refuses to
+   start without `PII_HMAC_KEY` and `VAULT_BACKEND`.
 5. Phase 4 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
    AgentCore (phase 5).
 

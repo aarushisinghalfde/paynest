@@ -39,6 +39,16 @@ SQS_ENDPOINT_URL = os.environ.get("SQS_ENDPOINT_URL", "")
 
 RESULTS_DIR = ROOT / "results"
 
+# Phase 3: PII gate. PII_HMAC_KEY keys the sender email/phone tokens (SSM SecureString in AWS).
+PII_HMAC_KEY = os.environ.get("PII_HMAC_KEY", "")
+# Vault for raw values: "dynamo" in AWS (table + KMS key from infra/cfn/vault.yaml),
+# "memory" on the laptop. Empty stops the worker, so values are never silently dropped.
+VAULT_BACKEND = os.environ.get("VAULT_BACKEND", "")
+VAULT_TABLE = _env("VAULT_TABLE", "paynest-demo-pii-vault")
+VAULT_KEY_ID = _env("VAULT_KEY_ID", "alias/paynest-demo-vault")
+VAULT_TTL_DAYS = int(_env("VAULT_TTL_DAYS", "30"))
+MAX_TICKET_CHARS = 20000
+
 
 def load_region(name: str | None = None) -> dict:
     path = ROOT / "config" / "regions" / f"{name or REGION}.yaml"
