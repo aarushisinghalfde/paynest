@@ -16,3 +16,9 @@ providers:
 
 budget:
   daily_usd_cap: 0.50
+
+# Default rung per job, set from the model-fit test (scripts/model_fit.py) and the
+# faithfulness eval (phase 8). One retry goes one rung up.
+defaults:
+  classify: 0
+  draft: 1

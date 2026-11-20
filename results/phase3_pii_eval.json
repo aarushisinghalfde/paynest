@@ -69,6 +69,6 @@
   "false_positive_rate": 0.0,
   "clean_sentences": 30,
   "clean_sentences_changed": 0,
-  "latency_ms_p50": 0.57,
-  "latency_ms_p95": 1.07
+  "latency_ms_p50": 0.61,
+  "latency_ms_p95": 1.38
 }

@@ -6,6 +6,7 @@ tenant gets a different token for the same address, so tokens cannot be joined a
 tenants. Without PII_HMAC_KEY (an SSM SecureString in AWS) a token cannot be reversed or
 recomputed by guessing addresses.
 """
+
 import hashlib
 import hmac
 import re
@@ -20,7 +21,7 @@ def normalize(kind: str, value: str) -> str:
         return value.strip().lower()
     if kind == "phone":
         digits = re.sub(r"\D", "", normalize_digits(value))
-        return digits[2:] if digits.startswith("00") else digits   # 00971... == +971...
+        return digits[2:] if digits.startswith("00") else digits  # 00971... == +971...
     raise ValueError(f"unknown kind {kind}")
 
 

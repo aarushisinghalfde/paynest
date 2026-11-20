@@ -13,13 +13,17 @@ Order of work:
      <IBAN_1>. The same value always gets the same token within a ticket.
 
 Over-masking is preferred to leaking: an unknown long number is masked as <ACCOUNT_n>.
+
+Masking is by FORMAT (phase 4 decision): a value shaped like an ID is masked even when its
+checksum fails, because a customer's typo in their Aadhaar is still their Aadhaar. The
+checksum, and a nearby keyword such as "Aadhaar", only decide the label (AADHAAR vs ACCOUNT).
 """
 import re
 from dataclasses import dataclass, field
 
 from pii import names, presidio_layer
 from pii.normalize import normalize_digits
-from pii.validators import IFSC_RE, PAN_RE, iban_valid, is_aadhaar, is_emirates_id
+from pii.validators import IFSC_RE, iban_valid, is_aadhaar
 
 ND = r"(?<!\d)"  # no digit before
 NA = r"(?!\d)"   # no digit after
@@ -34,6 +38,11 @@ PHONE_AE_RE = re.compile(
     r"(?:\+971|00971|(?<!\d)0)" + SEP + r"(?:5\d|[2-9])" + SEP + r"\d{3}" + SEP + r"\d{4}" + NA
 )
 LONG_NUMBER_RE = re.compile(ND + r"\d{9,18}" + NA)
+# PAN by format: 5 letters, 4 digits, 1 letter. (validators.PAN_RE also checks the 4th letter,
+# the holder type; masking must not depend on that.)
+PAN_FORMAT_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{5}\d{4}[A-Z](?![A-Za-z0-9])")
+# IBAN lengths for the countries our tenants bank in; any other IBAN must pass mod-97.
+IBAN_LENGTHS = {"AE": 23, "SA": 24, "BH": 22, "OM": 23, "QA": 29, "KW": 30, "GB": 22, "DE": 22}
 UAN_CONTEXT_RE = re.compile(r"(?i:\bUAN\b|यूएएन|يو\s?ايه\s?ان)")
 AADHAAR_CONTEXT_RE = re.compile(r"(?i:\baadhaa?r\b|आधार)")
 
@@ -43,27 +52,37 @@ ARAB_NAME = r"(?!ال)[\u0621-\u064A]+(?: [\u0621-\u064A]+)?"   # a first name n
 
 NAME_PATTERNS = [
     # English and Hinglish
-    re.compile(r"(?i:\bmy name is|\bi am|\bi'm|\bthis is)\s+(" + LATIN_NAME + r")"),
-    re.compile(r"(?i:\bemployee|\bcolleague|\bstaff member|\bmr\.?|\bmrs\.?|\bms\.?|\bdr\.?)\s+("
+    re.compile(r"(?i:\bmy name is|\bi am|\bi'm|\bthis is)[ \t]+(" + LATIN_NAME + r")"),
+    re.compile(r"(?i:\bemployee|\bcolleague|\bstaff member|\bmr\.?|\bmrs\.?|\bms\.?|\bdr\.?)[ \t]+("
                + LATIN_NAME + r")"),
-    re.compile(r"(?i:\bmera naam|\bmeraa naam|\bnaam)\s+(" + LATIN_NAME + r")"),
+    re.compile(r"(?i:\bmera naam|\bmeraa naam|\bnaam)[ \t]+(" + LATIN_NAME + r")"),
     re.compile(r"(?i:\b(?:regards|thanks|thank you|sincerely|cheers|dhanyavaad|shukriya))"
                r"[,.!]?[ \t]*\n+[ \t]*(" + LATIN_NAME + r")"),
     # Hindi
-    re.compile(r"(?:मेरा नाम|नाम)\s+(" + DEVA_NAME + r")"),
-    re.compile(r"(?:कर्मचारी|श्रीमती|श्री|सहकर्मी)\s+(" + DEVA_NAME + r")"),
+    re.compile(r"(?:मेरा नाम|नाम)[ \t]+(" + DEVA_NAME + r")"),
+    re.compile(r"(?:कर्मचारी|श्रीमती|श्री|सहकर्मी)[ \t]+(" + DEVA_NAME + r")"),
     re.compile(r"(?:धन्यवाद|सादर)[,।!]?[ \t]*\n+[ \t]*(" + DEVA_NAME + r")"),
     # Arabic
-    re.compile(r"(?:اسمي|أنا)\s+(" + ARAB_NAME + r")"),
-    re.compile(r"(?:الموظفة|الموظف|السيدة|السيد|زميلي|زميلتي)\s+(" + ARAB_NAME + r")"),
+    re.compile(r"(?:اسمي|أنا)[ \t]+(" + ARAB_NAME + r")"),
+    re.compile(r"(?:الموظفة|الموظف|السيدة|السيد|زميلي|زميلتي)[ \t]+(" + ARAB_NAME + r")"),
     re.compile(r"(?:مع التحية|مع خالص التحيات|وشكرا|شكرا)[^\n]*\n+[ \t]*(" + ARAB_NAME + r")"),
 ]
 
 # Words the name patterns may pick up that are not names (kept unmasked).
 NOT_NAMES = {
     "Payroll", "Support", "Team", "Hr", "Finance", "Payce", "Sir", "Madam", "Writing", "Facing",
-    "Unable", "Not", "The", "Please", "Hai", "Hoon", "Ka", "Ki", "Ke", "Is", "Here", "Very",
+    "Unable", "Not", "The", "Please", "How", "What", "Why", "When", "Where", "Which", "Who", "Can",
+    "Hai", "Hoon", "Ka", "Ki", "Ke", "Is", "Here", "Very",
     "है", "हूं", "हूँ", "का", "की", "के", "को", "भुगतान",
+}
+# Common Hindi words that follow a cue such as कर्मचारी ("employee") but are not names
+# (found on the real export in phase 4: "नया कर्मचारी कैसे जोड़ें", "कर्मचारी को सिस्टम में").
+NOT_NAMES |= {
+    "कैसे", "क्या", "क्यों", "कब", "कहाँ", "कहां", "कौन", "कितना", "कितने", "में", "से", "ने", "हैं", "था",
+    "थी", "थे", "नहीं", "और", "या", "पर", "भी", "तो", "जोड़ें", "जोड़े", "जोड़", "जोड़ना", "सिस्टम", "नया",
+    "नए", "नई", "सभी", "अपना", "अपने", "हमारे", "हमारा", "मेरे", "मेरी", "इस", "उस", "यह", "वह", "लिए",
+    "द्वारा", "वेतन", "पर्ची", "खाता", "खाते", "विवरण", "रिपोर्ट", "छुट्टी", "बोनस", "सूची", "डेटा", "फॉर्म",
+    "की", "गया", "गई", "गए", "रहा", "रही", "रहे", "होगा", "करें", "करना", "चाहिए", "हुआ", "हुई",
 }
 
 # Two or more capitalised Latin words in a row ("Ananya Iyer", "Rahul Singhania") are treated
@@ -174,22 +193,23 @@ def _structured_spans(norm: str) -> list[_Span]:
     for m in EMAIL_RE.finditer(norm):
         spans.append(_Span(m.start(), m.end(), "EMAIL", _key("EMAIL", m.group())))
     for m in IBAN_RE.finditer(norm):
-        if iban_valid(m.group()):
+        compact = re.sub(r"\s", "", m.group())
+        by_format = IBAN_LENGTHS.get(compact[:2]) == len(compact) and compact[2:].isdigit()
+        if by_format or iban_valid(compact):
             spans.append(_Span(m.start(), m.end(), "IBAN", _key("IBAN", m.group())))
-    for m in EMIRATES_ID_RE.finditer(norm):
-        d = _digits(m.group())
-        spans.append(_Span(m.start(), m.end(), "EMIRATES_ID" if is_emirates_id(d) else "ACCOUNT", d))
+    for m in EMIRATES_ID_RE.finditer(norm):          # 784-YYYY-NNNNNNN-N: the format is the evidence
+        spans.append(_Span(m.start(), m.end(), "EMIRATES_ID", _digits(m.group())))
     for m in TWELVE_RE.finditer(norm):
         d = _digits(m.group())
         before = norm[max(0, m.start() - 30):m.start()]
         if _last_pos(UAN_CONTEXT_RE, before) > _last_pos(AADHAAR_CONTEXT_RE, before):
             kind = "UAN"
-        elif is_aadhaar(d):
+        elif is_aadhaar(d) or _last_pos(AADHAAR_CONTEXT_RE, before) >= 0:
             kind = "AADHAAR"
         else:
             kind = "ACCOUNT"
         spans.append(_Span(m.start(), m.end(), kind, d))
-    for m in PAN_RE.finditer(norm):
+    for m in PAN_FORMAT_RE.finditer(norm):
         spans.append(_Span(m.start(), m.end(), "PAN", _key("PAN", m.group())))
     for m in IFSC_RE.finditer(norm):
         spans.append(_Span(m.start(), m.end(), "IFSC", _key("IFSC", m.group())))
@@ -209,7 +229,11 @@ def _name_variants(sender_name: str | None, text: str,
         people.append(" ".join(sender_name.split()))
     for rx in NAME_PATTERNS:
         for m in rx.finditer(text):
-            words = [w for w in m.group(1).split() if w not in NOT_NAMES]
+            words = []
+            for w in m.group(1).split():       # a name is the words BEFORE the first non-name word
+                if w in NOT_NAMES:
+                    break
+                words.append(w)
             if words:
                 people.append(" ".join(words))
     for m in CAP_RUN_RE.finditer(text):

@@ -6,12 +6,13 @@ carries the ID only); the worker masks it before anything else reads it. GET
 /tickets/{id} returns masked fields only, never the raw body.
 Chat and review WebSockets arrive in phases 5 and 10.
 """
+
 import json
 import logging
 import re
 import uuid
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 
 from shared import deps, settings
@@ -20,7 +21,7 @@ from shared.logs import log_event, safe_error
 app = FastAPI(title="Payce Support Assist API", version="0.2.0")
 log = logging.getLogger("api")
 
-TENANT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
+TENANT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{1,39}$")  # C-1001, check-phase3
 
 
 class TicketIn(BaseModel):
@@ -35,7 +36,7 @@ class TicketIn(BaseModel):
     @classmethod
     def _tenant(cls, v: str) -> str:
         if not TENANT_RE.match(v):
-            raise ValueError("tenant_id: 2-40 lowercase letters, digits or hyphens")
+            raise ValueError("tenant_id: 2-40 letters, digits or hyphens")
         return v
 
 
@@ -47,9 +48,9 @@ _queue = None
 def get_store():
     global _store
     if _store is None:
-        from intake.store import PgTicketStore
+        from agent.store import PgAgentStore
 
-        _store = PgTicketStore(settings.DATABASE_URL)
+        _store = PgAgentStore(settings.DATABASE_URL)
     return _store
 
 
@@ -87,19 +88,41 @@ def ready(response: Response) -> dict:
 
 
 @app.post("/tickets", status_code=202)
-def create_ticket(ticket: TicketIn) -> dict:
-    """Store the ticket (raw text goes to the short-lived inbox only) and queue its ID."""
+def create_ticket(
+    ticket: TicketIn, response: Response, idempotency_key: str | None = Header(default=None, max_length=100)
+) -> dict:
+    """Store the ticket (raw text goes to the short-lived inbox only) and queue its ID.
+
+    With an Idempotency-Key header, the same message posted again (a retry, a double click,
+    20 parallel posts) returns the first ticket and is not queued twice.
+    """
     store = get_store()
-    ticket_id = store.create(ticket.tenant_id, ticket.channel, ticket.body, ticket.sender_name,
-                             ticket.sender_email, ticket.sender_phone)
+    ticket_id, created = store.create_idempotent(
+        ticket.tenant_id,
+        ticket.channel,
+        ticket.body,
+        ticket.sender_name,
+        ticket.sender_email,
+        ticket.sender_phone,
+        idempotency_key,
+    )
+    if not created:
+        response.status_code = 200
+        return {"ticket_id": ticket_id, "status": "duplicate_request"}
     try:
         get_queue()(json.dumps({"ticket_id": ticket_id}))
     except Exception as exc:  # noqa: BLE001 - undo, so no ticket waits forever unqueued
         store.delete(ticket_id)
         log_event(log, "ticket_enqueue_failed", logging.ERROR, ticket_id=ticket_id, **safe_error(exc))
         raise HTTPException(503, "queue unavailable, ticket not accepted; please retry") from None
-    log_event(log, "ticket_received", ticket_id=ticket_id, tenant_id=ticket.tenant_id,
-              channel=ticket.channel, chars=len(ticket.body))
+    log_event(
+        log,
+        "ticket_received",
+        ticket_id=ticket_id,
+        tenant_id=ticket.tenant_id,
+        channel=ticket.channel,
+        chars=len(ticket.body),
+    )
     return {"ticket_id": ticket_id, "status": "received"}
 
 
@@ -113,5 +136,6 @@ def get_ticket(ticket_id: str) -> dict:
     if ticket is None:
         raise HTTPException(404, "ticket not found")
     if ticket["status"] != "masked":
-        ticket["masked_body"] = None      # nothing to show until the gate has passed it
+        ticket["masked_body"] = None  # nothing to show until the gate has passed it
+    ticket["replies"] = get_store().replies(ticket_id)
     return ticket

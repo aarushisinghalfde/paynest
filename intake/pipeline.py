@@ -7,6 +7,7 @@ Order matters for retries: values go to the vault before the masked row is saved
 the vault write fails the inbox row is still there and SQS redelivers the message. Vault
 writes are append-only and masking is deterministic, so a retry writes the same tokens.
 """
+
 import logging
 import re
 import time
@@ -19,14 +20,17 @@ from shared.logs import log_event
 
 log = logging.getLogger("pii.gate")
 
-SENDER_TOKENS = {"sender_name": "<SENDER_NAME>", "sender_email": "<SENDER_EMAIL>",
-                 "sender_phone": "<SENDER_PHONE>"}
+SENDER_TOKENS = {
+    "sender_name": "<SENDER_NAME>",
+    "sender_email": "<SENDER_EMAIL>",
+    "sender_phone": "<SENDER_PHONE>",
+}
 
 
 @dataclass
 class Outcome:
     ticket_id: str
-    status: str                 # masked | pii_blocked | skipped
+    status: str  # masked | pii_blocked | skipped
     counts: dict
     reasons: list
     ms: float
@@ -44,8 +48,13 @@ def _present(value: str, text: str) -> bool:
     if re.search(r"(?<!\w)" + re.escape(v) + r"(?!\w)", normalize_digits(text)):
         return True
     sq = _squash(v)
-    return sq.isascii() and sq.isalnum() and len(sq) >= 6 and any(c.isdigit() for c in sq) and \
-        sq in _squash(text)
+    return (
+        sq.isascii()
+        and sq.isalnum()
+        and len(sq) >= 6
+        and any(c.isdigit() for c in sq)
+        and sq in _squash(text)
+    )
 
 
 def rescan(masked: str, values: dict, inbox) -> list[str]:
@@ -68,24 +77,38 @@ def ner_layer_name() -> str:
     return "presidio" if presidio_layer.available() else "rules"
 
 
-def process_ticket(ticket_id: str, store, vault, hmac_key: bytes, ttl_days: int = 30,
-                   now=time.time) -> Outcome:
+def process_ticket(
+    ticket_id: str, store, vault, hmac_key: bytes, ttl_days: int = 30, now=time.time
+) -> Outcome:
     t0 = time.perf_counter()
     inbox = store.load_inbox(ticket_id)
-    if inbox is None:   # already masked or quarantined (a redelivered message), or unknown id
+    if inbox is None:  # already masked or quarantined (a redelivered message), or unknown id
         log_event(log, "ticket_skipped", ticket_id=ticket_id)
         return Outcome(ticket_id, "skipped", {}, [], 0.0)
 
-    result = mask_ticket(inbox.body, sender_name=inbox.sender_name, sender_email=inbox.sender_email,
-                         sender_phone=inbox.sender_phone)
+    result = mask_ticket(
+        inbox.body,
+        sender_name=inbox.sender_name,
+        sender_email=inbox.sender_email,
+        sender_phone=inbox.sender_phone,
+    )
     layer = ner_layer_name()
     reasons = rescan(result.text, result.values, inbox)
     ms = round((time.perf_counter() - t0) * 1000, 1)
 
     if reasons:
         store.save_blocked(ticket_id, result.counts, reasons, layer)
-        log_event(log, "pii_blocked", logging.WARNING, ticket_id=ticket_id, tenant_id=inbox.tenant_id,
-                  counts=result.counts, reasons=reasons, ner_layer=layer, ms=ms)
+        log_event(
+            log,
+            "pii_blocked",
+            logging.WARNING,
+            ticket_id=ticket_id,
+            tenant_id=inbox.tenant_id,
+            counts=result.counts,
+            reasons=reasons,
+            ner_layer=layer,
+            ms=ms,
+        )
         return Outcome(ticket_id, "pii_blocked", result.counts, reasons, ms)
 
     values = dict(result.values)
@@ -94,11 +117,23 @@ def process_ticket(ticket_id: str, store, vault, hmac_key: bytes, ttl_days: int 
             values[token] = getattr(inbox, field)
     expires_at = int(now()) + ttl_days * 86400
     vault.put(ticket_id, inbox.tenant_id, values, expires_at)
-    store.save_masked(ticket_id, result.text, result.counts,
-                      sender_token(hmac_key, inbox.tenant_id, "email", inbox.sender_email),
-                      sender_token(hmac_key, inbox.tenant_id, "phone", inbox.sender_phone),
-                      layer)
+    store.save_masked(
+        ticket_id,
+        result.text,
+        result.counts,
+        sender_token(hmac_key, inbox.tenant_id, "email", inbox.sender_email),
+        sender_token(hmac_key, inbox.tenant_id, "phone", inbox.sender_phone),
+        layer,
+    )
     ms = round((time.perf_counter() - t0) * 1000, 1)
-    log_event(log, "ticket_masked", ticket_id=ticket_id, tenant_id=inbox.tenant_id, counts=result.counts,
-              vaulted=len(values), ner_layer=layer, ms=ms)
+    log_event(
+        log,
+        "ticket_masked",
+        ticket_id=ticket_id,
+        tenant_id=inbox.tenant_id,
+        counts=result.counts,
+        vaulted=len(values),
+        ner_layer=layer,
+        ms=ms,
+    )
     return Outcome(ticket_id, "masked", result.counts, [], ms)

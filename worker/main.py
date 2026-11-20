@@ -12,6 +12,7 @@ after the run has reached a checkpoint.
 
 Run:  python -m worker.main
 """
+
 import json
 import logging
 import signal
@@ -55,8 +56,9 @@ def process_once(client, url: str, cache=None, wait_seconds: int = 20, gate=None
             handle(message, cache, gate)
         except Exception as exc:  # noqa: BLE001 - leave it for redelivery
             # Type and location only: an exception message can quote ticket text.
-            log_event(log, "message_failed", logging.ERROR, message_id=message.get("MessageId"),
-                      **safe_error(exc))
+            log_event(
+                log, "message_failed", logging.ERROR, message_id=message.get("MessageId"), **safe_error(exc)
+            )
             continue
         client.delete_message(QueueUrl=url, ReceiptHandle=message["ReceiptHandle"])
     return len(messages)
@@ -69,8 +71,10 @@ def wait_for_queue(client, attempts: int = 30, delay: float = 2.0) -> str:
         except Exception as exc:  # noqa: BLE001
             log.info("queue not ready (%s/%s): %s", attempt, attempts, type(exc).__name__)
             time.sleep(delay)
-    raise RuntimeError(f"queue {settings.SQS_QUEUE_NAME} not reachable in {settings.AWS_REGION}: "
-                       "check `aws login` and scripts/create_dev_queues.py")
+    raise RuntimeError(
+        f"queue {settings.SQS_QUEUE_NAME} not reachable in {settings.AWS_REGION}: "
+        "check `aws login` and scripts/create_dev_queues.py"
+    )
 
 
 def run(client, url: str, cache, stop: dict, sleep=time.sleep, gate=None) -> None:
@@ -88,18 +92,30 @@ def run(client, url: str, cache, stop: dict, sleep=time.sleep, gate=None) -> Non
 
 
 def build_gate():
-    """The PII gate with its real store and vault. Fails fast on missing configuration."""
-    from intake.pipeline import process_ticket
-    from intake.store import PgTicketStore
+    """The agent with its real store, vault and Postgres checkpoints. Fails fast on missing configuration.
+
+    gate(ticket_id) runs (or resumes) the ticket's graph: pii_gate first, then the other
+    nodes, checkpointed after each one. It raises on failure so the message is redelivered.
+    """
+    from agent import graph as agent_graph
+    from agent.nodes import Deps
+    from agent.store import PgAgentStore
     from intake.vault import from_settings
     from pii import presidio_layer
 
     if not settings.PII_HMAC_KEY:
         raise RuntimeError("PII_HMAC_KEY is not set: see .env.example")
-    presidio_layer.get_analyzer()     # PII_NER=required raises here, not on the first ticket
-    store, vault = PgTicketStore(settings.DATABASE_URL), from_settings(settings)
-    key = settings.PII_HMAC_KEY.encode("utf-8")
-    return lambda ticket_id: process_ticket(ticket_id, store, vault, key, settings.VAULT_TTL_DAYS)
+    presidio_layer.get_analyzer()  # PII_NER=required raises here, not on the first ticket
+    from agent.classifier import Classifier, similar_from_db
+    from agent.models import ModelClient, PgLedger, config
+
+    client = ModelClient(ledger=PgLedger(settings.DATABASE_URL))
+    classifier = Classifier(similar_from_db(settings.DATABASE_URL), client if client.key else None,
+                            rung=config().get("defaults", {}).get("classify", 0))
+    deps = Deps(PgAgentStore(settings.DATABASE_URL), from_settings(settings), settings.PII_HMAC_KEY.encode(),
+                settings.VAULT_TTL_DAYS, classifier=classifier)
+    graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))
+    return lambda ticket_id: agent_graph.run(graph, ticket_id)
 
 
 def main() -> None:

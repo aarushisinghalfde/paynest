@@ -61,3 +61,18 @@ def test_arabic_prefix_kept_and_name_masked():
 
 def test_name_inside_a_longer_word_is_not_a_match():
     assert not any(v == "علي" for v, _ in _name_variants(None, "يرجى إرسال شهادة الراتب عليه ختم."))
+
+
+# Found on the real export in phase 4 (shapes reproduced with neutral wording).
+@pytest.mark.parametrize("text", [
+    "Question about a new employee\nHow do we add them to payroll?",
+    "नया कर्मचारी कैसे जोड़ें",
+    "नए कर्मचारी को सिस्टम में कैसे जोड़ें?",
+])
+def test_cue_words_do_not_cross_lines_or_take_common_hindi_words(text):
+    assert mask_ticket(text).text == text
+
+
+def test_hindi_employee_cue_still_finds_a_real_name():
+    r = mask_ticket("कर्मचारी सुरेश का वेतन नहीं आया")
+    assert "सुरेश" not in r.text

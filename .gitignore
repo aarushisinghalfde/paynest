@@ -16,3 +16,6 @@ web/dist/
 # Real ticket data never goes into git; only masked data and synthetic samples do
 data/raw/
 data/masked/
+
+# masked client data (labelled sets): never in the public repo
+evals/local/

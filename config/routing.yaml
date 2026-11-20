@@ -1,0 +1,14 @@
+# Where each tenant's data is processed, by the tenant's home country.
+#   home:        the production region for the country (data must stay in-country)
+#   demo:        the table used now: everything runs in Sydney, the one built region
+#   production:  the table for the real stacks (placeholders, never applied)
+home:
+  IN: ap-south-1
+  UAE: me-central-1
+tables:
+  demo:
+    IN: ap-southeast-2
+    UAE: ap-southeast-2
+  production:
+    IN: ap-south-1
+    UAE: me-central-1

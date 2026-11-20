@@ -266,6 +266,49 @@ flowchart TD
   seed (rules only): 100% of 408 values, 0/30 clean sentences changed, p50 0.6 ms. This
   proves the plumbing; real recall needs the phase 4 data.
 
+### Data load (phase 4, `loader/`)
+
+```mermaid
+flowchart LR
+  L["Laptop: run_phase4.py<br/>zip data/, integrations/, process/"] --> S3["S3 raw/<br/>(your sign-in)"]
+  L -->|"15-min presigned GET + PUT,<br/>SSM Run Command"| E["EC2: loader load<br/>(worker image)"]
+  S3 --> E
+  E --> G["Parse 3 ticket formats, WhatsApp, calls,<br/>Jira, CSAT, SLA, roster, costs"]
+  G --> M["PII gate per record<br/>(subject + body + notes as one document)"]
+  M --> V["Vault (DynamoDB + KMS)"]
+  M --> P["Postgres: 14 tables, one transaction"]
+  P --> LS["200-ticket labelled set (masked)<br/>-> S3 masked/eval/"]
+  P --> C["check_phase4.py -> loader verify on the EC2"]
+```
+
+- **The raw data never leaves the EC2 and S3.** The EC2 role still has no access to
+  `raw/`: your laptop script uploads the zip with your sign-in and hands the EC2 a 15-minute
+  presigned URL. Only operational files are loaded (`data/`, `integrations/`, `process/`);
+  interview transcripts, emails and the org chart are discovery material for people.
+- **Masking by format (phase 4 decision).** The real export's IDs fail their checksums on
+  purpose (Aadhaar `0000...`, IBAN `AE00...`, PAN `ABCDE...`): the phase 3 gate leaked all 38
+  PANs. Any value shaped like an ID is now masked; the checksum or a nearby keyword only picks
+  the label. Real data also exposed two name false positives (a cue crossing a line break;
+  Hindi "कर्मचारी कैसे जोड़ें"), fixed and regression-tested. Result: 0 leaks, 103 tickets with PII.
+- **Timestamps to UTC, by evidence:** naive values are IST in all three ticket systems
+  (widget +5:30 from its epoch history, 483/483; partner +5:30 from `opened_on`, 219/219; email
+  naive events in order only when read as IST, 185/185). Call and CSAT times assumed IST.
+- **Duplicates:** the 14 repeated rows are dropped (1,367 -> 1,353 unique); the 26 resubmits
+  ("duplicate of PN-...") stay as tickets for phase 7. 65 partner tickets carry only the end
+  customer's name; the loader resolves the tenant by name and records `tenant_resolved_by`.
+- **Labels:** the export's top-level category is the *final* label; the customer's pick is on
+  the `created` event. 201 of 1,327 picks were wrong, 111 tickets moved more than once.
+- **Knowledge with dates:** 24 KB titles, the 4 old excerpts (closed with `effective_to`,
+  `superseded_by` the rule), 4 rule chunks, 18 process-doc sections. `get_rate(region, topic,
+  as_of)` returns the old value before a rule's date and the new one from it.
+- **Data minimisation:** agent names and SLA approvers' names are not loaded.
+- **Labelled set:** 200 masked tickets stratified by team (9) and language (4), saved to
+  `s3://.../masked/eval/` and `evals/local/` (git-ignored: masked client data stays out of the
+  public repo). Next: an independent relabel and a human check of every disagreement.
+- **Routing:** `config/routing.yaml`. Every tenant has a home region (`ap-south-1` or
+  `me-central-1`); the demo table sends all to Sydney, the production table to the home
+  region. A load refuses to run in a region its table sends no tenant to.
+
 ---
 
 ## 6. Release flow (images)
@@ -341,6 +384,9 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **Raw ticket text in a short-lived `ticket_inbox`, deleted when masked** | The worker masks (keeps spaCy out of the API); raw text is never in `tickets`, which everything else reads. |
 | 20 Nov | **Metrics from JSON log events (CloudWatch metric filters), logs shipped by Docker's awslogs driver** | No metrics code or extra IAM in the app; one place (logs) feeds dashboards and alarms. |
 | 20 Nov | **Vault append-only is enforced by the app (condition on PutItem), not IAM** | IAM cannot require a condition expression; read, update and delete are denied by IAM. A compromised app could overwrite a value it is allowed to write, but never read one. |
+| 20 Nov | **PII: mask IDs by format, not checksum** | The real export's IDs fail checksums; a typo'd ID is still personal data. Checksums only label. |
+| 20 Nov | **Load all operational data, none of the discovery material** | The agent needs tickets, conversations, Jira, SLA and KB; transcripts and emails add staff PII and no agent value. |
+| 20 Nov | **Loader on the EC2 via presigned URLs** | The EC2 role keeps no access to `raw/`; you grant a 15-minute read per run. Portal upload (with admin login) proposed as phase 4b. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
 
 ---
@@ -379,7 +425,9 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observabili
    approval): `vault.yaml` and `observability.yaml` written, `ec2.yaml` user data updated,
    `check_phase3.py` (12 checks) written; deploy steps in the handoff. Then 3c:
    multilingual NER. **Do not release a new image before 3b-2:** the worker now refuses to
-   start without `PII_HMAC_KEY` and `VAULT_BACKEND`.
+   start without `PII_HMAC_KEY` and `VAULT_BACKEND`. **Phase 3 gate passed 12/12.**
+   Phase 4 written: loader, migration 003, `run_phase4.py`, `check_phase4.py` (needs image
+   v0.3.0). Next: relabel the 200-ticket set; phase 4b portal upload with admin login.
 5. Phase 4 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
    AgentCore (phase 5).
 

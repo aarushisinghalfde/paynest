@@ -12,6 +12,7 @@ vault-reveal Lambda has GetItem and kms:Decrypt.
 Writes are append-only (a condition refuses to overwrite), so a redelivered message is
 harmless and a compromised app cannot replace a stored value.
 """
+
 import logging
 import re
 import time
@@ -19,7 +20,7 @@ import time
 log = logging.getLogger(__name__)
 
 TOKEN_RE = re.compile(r"^<([A-Z_]+?)(?:_\d+)?>$")
-KMS_MAX_PLAINTEXT = 4096   # bytes, a KMS Encrypt limit; ticket values are far smaller
+KMS_MAX_PLAINTEXT = 4096  # bytes, a KMS Encrypt limit; ticket values are far smaller
 
 
 def kind_of(token: str) -> str:
@@ -43,9 +44,13 @@ class MemoryVault:
         written = 0
         for token, value in values.items():
             key = (ticket_id, token)
-            if key not in self.items:      # append-only, like the DynamoDB condition
-                self.items[key] = {"tenant_id": tenant_id, "kind": kind_of(token), "value": value,
-                                   "expires_at": expires_at}
+            if key not in self.items:  # append-only, like the DynamoDB condition
+                self.items[key] = {
+                    "tenant_id": tenant_id,
+                    "kind": kind_of(token),
+                    "value": value,
+                    "expires_at": expires_at,
+                }
                 written += 1
         return written
 
@@ -71,14 +76,20 @@ class DynamoKmsVault:
             plaintext = value.encode("utf-8")
             if len(plaintext) > KMS_MAX_PLAINTEXT:
                 raise ValueError(f"vault value for {kind_of(token)} is too long")
-            blob = self.kms.encrypt(KeyId=self.key_id, Plaintext=plaintext,
-                                    EncryptionContext=context(ticket_id, token, tenant_id))["CiphertextBlob"]
+            blob = self.kms.encrypt(
+                KeyId=self.key_id, Plaintext=plaintext, EncryptionContext=context(ticket_id, token, tenant_id)
+            )["CiphertextBlob"]
             try:
                 self.ddb.put_item(
                     TableName=self.table,
-                    Item={"ticket_id": {"S": ticket_id}, "token": {"S": token},
-                          "tenant_id": {"S": tenant_id}, "kind": {"S": kind_of(token)},
-                          "ciphertext": {"B": blob}, "expires_at": {"N": str(expires_at)}},
+                    Item={
+                        "ticket_id": {"S": ticket_id},
+                        "token": {"S": token},
+                        "tenant_id": {"S": tenant_id},
+                        "kind": {"S": kind_of(token)},
+                        "ciphertext": {"B": blob},
+                        "expires_at": {"N": str(expires_at)},
+                    },
                     ConditionExpression="attribute_not_exists(ticket_id)",
                 )
                 written += 1

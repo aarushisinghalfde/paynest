@@ -16,4 +16,4 @@ extend-exclude = ["web", "scripts/phase0"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["B008"]
+ignore = ["B008", "E501"]   # line length is style only: off to keep momentum (user, 20 Nov)

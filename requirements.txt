@@ -11,6 +11,11 @@ python-dotenv>=1.0
 presidio-analyzer>=2.2.362,<2.3
 spacy>=3.8,<3.9
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# phase 5: the agent graph, checkpointed in Postgres
+langgraph>=0.4
+langgraph-checkpoint-postgres>=2.0
+# phase 6: similar-ticket match (character n-gram TF-IDF + nearest neighbours)
+scikit-learn>=1.5
 # tests and lint
 pytest>=8.0
 httpx>=0.27             # FastAPI TestClient
