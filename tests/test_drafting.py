@@ -331,3 +331,14 @@ def test_problem_reports_are_not_offered_an_unrelated_guide():
     store = MemoryAgentStore(TENANTS)
     _, st = _chat(store, _deps(store), "September salary for 12 employees, bank shows pending")
     assert st["draft_mode"] == "template" and st["sources"]["hits"] == []
+
+
+def test_update_request_while_waiting_for_review_gets_a_status_reply():
+    store = MemoryAgentStore(TENANTS)
+    deps = _deps(store)
+    t1, first = _chat(store, deps, "What is the PF wage ceiling for September 2026 payroll?")
+    assert first["route"] == "review"
+    t2, st = _chat(store, deps, "update?")
+    assert st["route"] == "chat" and st["sent"] and not store.list_reviews()[1:]  # no second review task
+    reply = store.replies(t2)[0]["body"]
+    assert t1[:8] in reply and "payroll specialist" in reply

@@ -66,7 +66,7 @@ def _question(state) -> str:
 def normalise(state, deps: Deps):
     text = " ".join(f"{state.get('subject', '')} {state.get('body', '')}".split())
     talk = conversation.kind(text)
-    history, context = [], None
+    history, context, status_of = [], None, None
     cid = state.get("meta", {}).get("conversation_id")
     if cid and hasattr(deps.store, "conversation"):
         history = [h for h in deps.store.conversation(cid, state["ticket_id"])
@@ -79,8 +79,11 @@ def normalise(state, deps: Deps):
         ):
             context = prev["text"]
             talk = None if talk == "vague" else talk
+        elif prev and talk == "vague" and prev.get("route") in ("review", "queue", "incident"):
+            talk = "status"  # "update?" while an earlier question is still with a person
+            status_of = {"ref": prev["ticket_id"][:8], "route": prev.get("route")}
     return {"language": language(text), "injection_rules": injection.detect(text), "talk": talk,
-            "context": context, "history": [{"text": h["text"][:400], "reply": (h.get("reply") or "")[:400]}
+            "context": context, "status_of": status_of, "history": [{"text": h["text"][:400], "reply": (h.get("reply") or "")[:400]}
                                              for h in history[-3:]],
             "steps": _step(state, "normalise")}
 
@@ -176,9 +179,11 @@ def draft(state, deps: Deps):
                     "sources": sources}
         out["sources"] = sources
     kind = {"block": "blocked", "incident": "incident", "duplicate": "duplicate", "ask": "clarify",
-            "chat": "thanks" if state.get("talk") == "thanks" else "greeting"}.get(route_, "ack")
+            "chat": {"thanks": "thanks", "status": "status"}.get(state.get("talk"), "greeting")}.get(route_, "ack")
+    earlier = state.get("status_of") or {}
     text = templates.render(kind, state.get("language", "en"), ref=ref, team=state.get("team") or "support",
-                            duplicate_of=state.get("duplicate_of") or "")
+                            duplicate_of=state.get("duplicate_of") or "", earlier=earlier.get("ref", ""),
+                            who="a payroll specialist" if earlier.get("route") == "review" else "our support team")
     return {**out, "draft": text, "draft_mode": "template"}
 
 

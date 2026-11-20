@@ -56,7 +56,17 @@ CLARIFY = {
 }
 
 
+STATUS = {
+    "en": "Your earlier question (ticket {earlier}) is with {who}. The answer will appear here as soon as it has "
+    "been checked; there is no need to send it again.",
+    "hi-Latn": "Aapka pichhla sawaal (ticket {earlier}) abhi {who} ke paas hai. Jaanch ke baad jawab yahin aayega; "
+    "dobara bhejne ki zaroorat nahi.",
+    "hi": "आपका पिछला सवाल (टिकट {earlier}) अभी जाँच में है। जवाब तैयार होते ही यहीं दिखेगा; दोबारा भेजने की ज़रूरत नहीं।",
+    "ar": "سؤالك السابق (التذكرة {earlier}) قيد المراجعة الآن. سيظهر الرد هنا فور التحقق منه، ولا حاجة لإرساله مرة أخرى.",
+}
+
+
 def render(kind: str, language: str, **kw) -> str:
     table = {"ack": ACK, "incident": INCIDENT, "duplicate": DUPLICATE, "greeting": GREETING, "thanks": THANKS,
-             "clarify": CLARIFY}.get(kind, BLOCKED)
+             "clarify": CLARIFY, "status": STATUS}.get(kind, BLOCKED)
     return table.get(language, table["en"]).format(**kw)

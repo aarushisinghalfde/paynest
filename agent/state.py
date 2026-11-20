@@ -35,7 +35,8 @@ class TicketState(TypedDict, total=False):
     route_rule: str
     queue: str | None
     injection_rules: list[str]
-    talk: str | None  # greeting | thanks | vague (agent/conversation.py)
+    talk: str | None  # greeting | thanks | vague | status (agent/conversation.py, normalise)
+    status_of: dict | None  # the earlier ticket an "update?" refers to: {ref, route}
     context: str | None  # the earlier message this one follows up (same conversation)
     history: list[dict]  # last turns of this conversation, masked: [{text, reply}]
     duplicate_reason: str | None
