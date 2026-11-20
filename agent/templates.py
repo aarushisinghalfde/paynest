@@ -10,11 +10,21 @@ ACK = {
     "जाँच के बाद हम यहीं जवाब देंगे।",
     "ar": "شكراً لتواصلك مع دعم Payce. تذكرتك {ref} لدى فريق {team}. سنرد هنا فور الانتهاء من المراجعة.",
 }
+INCIDENT = {
+    "en": "We are aware of an issue affecting several of your users and are working on it. Your ticket {ref} is "
+    "linked to it, and we will update you here as soon as it is fixed.",
+    "hi-Latn": "Hume ek issue ki jaankari hai jo aapke kai users ko affect kar raha hai. Aapka ticket {ref} usse "
+    "linked hai; fix hote hi hum yahin update denge.",
+}
+DUPLICATE = {
+    "en": "Thanks for following up. We have linked this message to your earlier ticket {duplicate_of} "
+    "so nothing is lost; the team handling it will reply there.",
+}
 BLOCKED = {
     "en": "Thanks, we have received your message ({ref}). A specialist will review it and reply.",
 }
 
 
 def render(kind: str, language: str, **kw) -> str:
-    table = ACK if kind == "ack" else BLOCKED
+    table = {"ack": ACK, "incident": INCIDENT, "duplicate": DUPLICATE}.get(kind, BLOCKED)
     return table.get(language, table["en"]).format(**kw)

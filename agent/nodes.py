@@ -6,8 +6,10 @@ resolve_tenant are real. Every node is idempotent, so re-running one after a cra
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from agent import keywords, templates
+from agent import dedupe as dd
+from agent import injection, keywords, router, templates
 from intake.pipeline import process_ticket
 from loader.normalize import language
 
@@ -39,14 +41,15 @@ def pii_gate(state, deps: Deps):
         "body": t["body"] or "",
         "route": "block" if blocked else state.get("route"),
         "route_reason": "pii re-scan quarantined the ticket" if blocked else state.get("route_reason"),
-        "meta": {**state.get("meta", {}), "ticket_ref": t.get("ticket_ref")},
+        "meta": {**state.get("meta", {}), "ticket_ref": t.get("ticket_ref"),
+                 "created_at": t.get("created_at") or datetime.now(UTC)},
         "steps": _step(state, "pii_gate"),
     }
 
 
 def normalise(state, deps: Deps):
     text = " ".join(f"{state.get('subject', '')} {state.get('body', '')}".split())
-    return {"language": language(text), "steps": _step(state, "normalise")}
+    return {"language": language(text), "injection_rules": injection.detect(text), "steps": _step(state, "normalise")}
 
 
 def resolve_tenant(state, deps: Deps):
@@ -68,34 +71,39 @@ def classify(state, deps: Deps):
     }
 
 
-def dedupe(state, deps: Deps):  # phase 7
-    return {"duplicate_of": None, "steps": _step(state, "dedupe")}
+def dedupe(state, deps: Deps):
+    """Duplicate of a recent ticket? Part of a burst (incident)? A known Jira issue?"""
+    if state.get("route") == "block" or not hasattr(deps.store, "recent_tickets"):
+        return {"duplicate_of": None, "steps": _step(state, "dedupe")}
+    text = f"{state.get('subject', '')} {state.get('body', '')}"
+    created = state.get("meta", {}).get("created_at")
+    recent = deps.store.recent_tickets(state["tenant_id"], created, state["ticket_id"])
+    dup, why = dd.find_duplicate(text, created, recent)
+    out = {"duplicate_of": dup, "duplicate_reason": why}
+    if not dup:
+        inc = dd.find_incident(text, created, recent, deps.store.open_incidents(state["tenant_id"]))
+        if inc.get("opened"):
+            deps.store.open_incident(inc["incident_id"], state["tenant_id"], state.get("team"), inc["signature"],
+                                     created, [*inc["members"], state["ticket_id"]])
+        if inc:
+            out |= {"incident_id": inc["incident_id"], "incident_size": len(inc["members"]) + 1}
+            deps.store.attach_incident(state["ticket_id"], inc["incident_id"])
+        out["jira_key"] = dd.match_jira(text, deps.store.open_jira(state["tenant_id"]))
+    deps.store.save_progress(state["ticket_id"], duplicate_of_ref=dup, jira_key=out.get("jira_key"))
+    return {**out, "steps": _step(state, "dedupe")}
 
 
 def route(state, deps: Deps):
-    if state.get("route") == "block":
-        return {"steps": _step(state, "route")}
-    if state.get("tenant") is None:
-        return {
-            "route": "queue",
-            "route_reason": "unknown tenant: triage desk",
-            "steps": _step(state, "route"),
-        }
-    branch = (state.get("classification") or {}).get("branch", "auto")
-    if branch == "triage":
-        reason = "low classification confidence: triage desk"
-    elif branch == "clarify":
-        second = state["classification"].get("second")
-        reason = f"{state.get('team')} vs {second} too close: joint pod"
-    else:
-        reason = f"auto-routed to {state.get('team')}"
-    return {"route": "reply", "route_reason": reason, "steps": _step(state, "route")}
+    d = router.decide(router.facts_from_state(state))
+    return {"route": d["route"], "route_reason": d["reason"], "route_rule": d["rule"], "queue": d.get("queue"),
+            "steps": _step(state, "route")}
 
 
-def draft(state, deps: Deps):  # phase 5 stand-in: a fixed template
+def draft(state, deps: Deps):  # phase 5-7: templates per route; phase 8 drafts from sources
     ref = state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8]
-    kind = "blocked" if state.get("route") == "block" else "ack"
-    text = templates.render(kind, state.get("language", "en"), ref=ref, team=state.get("team") or "support")
+    kind = {"block": "blocked", "incident": "incident", "duplicate": "duplicate"}.get(state.get("route"), "ack")
+    text = templates.render(kind, state.get("language", "en"), ref=ref, team=state.get("team") or "support",
+                            duplicate_of=state.get("duplicate_of") or "")
     return {"draft": text, "draft_version": state.get("draft_version", 0) + 1, "steps": _step(state, "draft")}
 
 
@@ -111,25 +119,18 @@ def output_guard(state, deps: Deps):  # phase 5 stand-in: schema only
 
 def send(state, deps: Deps):
     if not state.get("guard", {}).get("ok"):
-        deps.store.save_progress(
-            state["ticket_id"], agent_status="failed", route_reason="output guard failed"
-        )
+        deps.store.save_progress(state["ticket_id"], agent_status="failed", route_reason="output guard failed")
         return {"sent": False, "steps": _step(state, "send")}
+    common = dict(route=state.get("route"), route_reason=state.get("route_reason"),
+                  classification=state.get("classification"), team=state.get("team"), language=state.get("language"))
+    if state.get("route") == "review" and hasattr(deps.store, "create_review"):
+        # a human approves before anything is sent (statutory, P1, known issue)
+        deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], state.get("route_reason"))
+        deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common)
+        return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
     sent_now = deps.store.insert_reply(state["ticket_id"], state["draft_version"], state["draft"], "chat")
-    deps.store.save_progress(
-        state["ticket_id"],
-        agent_status="replied",
-        route=state.get("route"),
-        route_reason=state.get("route_reason"),
-        classification=state.get("classification"),
-        team=state.get("team"),
-        language=state.get("language"),
-    )
-    return {
-        "sent": True,
-        "meta": {**state.get("meta", {}), "sent_now": sent_now},
-        "steps": _step(state, "send"),
-    }
+    deps.store.save_progress(state["ticket_id"], agent_status="replied", **common)
+    return {"sent": True, "meta": {**state.get("meta", {}), "sent_now": sent_now}, "steps": _step(state, "send")}
 
 
 NODE_FUNCS = {

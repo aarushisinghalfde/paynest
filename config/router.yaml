@@ -1,0 +1,55 @@
+# The router: plain rules, first match wins (build plan section 2: "routed by code").
+# Each rule names the facts it needs; `reason` is what the reviewer and the trace show.
+# Routes: block, incident, duplicate, review (draft + human approval), reply (auto), queue.
+rules:
+  - id: R01-injection
+    when: {injection: true}
+    route: block
+    reason: "possible prompt injection ({injection_rules}): no model reply, human only"
+  - id: R02-pii-quarantine
+    when: {pii_blocked: true}
+    route: block
+    reason: "PII re-scan quarantined the ticket"
+  - id: R03-unknown-tenant
+    when: {tenant_known: false}
+    route: queue
+    queue: Triage-Desk
+    reason: "unknown tenant: triage desk"
+  - id: R04-incident
+    when: {incident: true}
+    route: incident
+    reason: "part of an open incident ({incident_size} similar tickets): incident update"
+  - id: R05-duplicate
+    when: {duplicate: true}
+    route: duplicate
+    reason: "duplicate of {duplicate_of} ({duplicate_reason}): linked, no second reply"
+  - id: R06-known-issue
+    when: {jira: true}
+    route: review
+    reason: "matches Jira {jira_key}: reply with the known-issue status, after review"
+  - id: R07-statutory
+    when: {team: Statutory}
+    route: review
+    reason: "statutory answer: drafted, human approval required"
+  - id: R08-p1
+    when: {priority_signal: true}
+    route: review
+    reason: "P1 signal (payroll cannot run / pay or filing at risk): human approval"
+  - id: R09-clarify
+    when: {branch: clarify}
+    route: queue
+    queue: Payroll-Statutory-Pod
+    reason: "{team} vs {second} too close: joint pod"
+  - id: R10-low-confidence
+    when: {branch: triage}
+    route: queue
+    queue: Triage-Desk
+    reason: "low classification confidence: triage desk"
+  - id: R11-howto
+    when: {team: How-To}
+    route: reply
+    reason: "How-To with clear classification: answered from approved sources"
+  - id: R99-default
+    when: {}
+    route: reply
+    reason: "{team}: acknowledged automatically, owner queue {team}"

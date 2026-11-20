@@ -139,3 +139,35 @@ def get_ticket(ticket_id: str) -> dict:
         ticket["masked_body"] = None  # nothing to show until the gate has passed it
     ticket["replies"] = get_store().replies(ticket_id)
     return ticket
+
+
+# ---------------------------------------------------------------- reviewer console (minimal)
+class Decision(BaseModel):
+    decision: str = Field(pattern=r"^(approve|reject)$")
+    body: str | None = Field(default=None, max_length=4000)
+    reviewer: str = Field(default="reviewer", max_length=100)
+
+
+def _admin(token: str | None):
+    if not settings.ADMIN_TOKEN:
+        raise HTTPException(503, "review console disabled: ADMIN_TOKEN not set")
+    import hmac
+
+    if not token or not hmac.compare_digest(token, settings.ADMIN_TOKEN):
+        raise HTTPException(401, "admin token required")
+
+
+@app.get("/review/tasks")
+def review_tasks(x_admin_token: str | None = Header(default=None)) -> list:
+    _admin(x_admin_token)
+    return get_store().list_reviews()
+
+
+@app.post("/review/tasks/{task_id}")
+def review_decide(task_id: str, d: Decision, x_admin_token: str | None = Header(default=None)) -> dict:
+    _admin(x_admin_token)
+    ticket_id = get_store().decide_review(task_id, d.decision, d.body, d.reviewer)
+    if ticket_id is None:
+        raise HTTPException(404, "task not found or already decided")
+    log_event(log, "review_decided", task_id=task_id, ticket_id=ticket_id, decision=d.decision)
+    return {"ticket_id": ticket_id, "decision": d.decision}

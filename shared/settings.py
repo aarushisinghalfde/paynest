@@ -48,6 +48,8 @@ VAULT_TABLE = _env("VAULT_TABLE", "paynest-demo-pii-vault")
 VAULT_KEY_ID = _env("VAULT_KEY_ID", "alias/paynest-demo-vault")
 VAULT_TTL_DAYS = int(_env("VAULT_TTL_DAYS", "30"))
 MAX_TICKET_CHARS = 20000
+# Reviewer console and other admin endpoints: requests must send X-Admin-Token. Empty = disabled.
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 
 
 def load_region(name: str | None = None) -> dict:
