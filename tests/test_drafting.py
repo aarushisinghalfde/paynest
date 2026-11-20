@@ -285,3 +285,49 @@ def test_is_howto():
 
     assert is_howto("How do I download payslips?") and is_howto("كيف يمكنني تحميل كشوف الرواتب")
     assert not is_howto("How do I fix the rejected WPS file?") and not is_howto("Salary not credited")
+
+
+def test_repeated_howto_questions_never_open_an_incident():
+    from agent.answer_cache import MemoryAnswerCache
+
+    store = MemoryAgentStore(TENANTS)
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES), answer_cache=MemoryAnswerCache())
+    from datetime import UTC, datetime
+
+    for i in range(7):
+        tid = store.create("C-1001", "chat", "How do I download payslips for all employees?", None)
+        store.save_progress(tid, conversation_id=f"conv-{i:04d}x", created_at=datetime.now(UTC))
+        st = run(tid, deps, MemoryCheckpoints())
+        assert st["route"] == "reply" and not st.get("incident_id"), (i, st["route"], st.get("route_reason"))
+    # the same burst of a real problem still opens an incident
+    for _ in range(5):
+        tid = store.create("C-1001", "chat", "Salary not credited for our employees, bank shows pending", None)
+        store.save_progress(tid, created_at=datetime.now(UTC))
+        st = run(tid, deps, MemoryCheckpoints())
+    assert st.get("incident_id") and st["route"] == "incident"
+
+
+def test_vague_message_after_an_answered_question_still_gets_its_own_question():
+    store = MemoryAgentStore(TENANTS)
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES))
+    _chat(store, deps, "How do I download payslips for all employees?")
+    _, st = _chat(store, deps, "payment delayed")
+    assert st["route"] == "ask" and not st.get("context")
+
+
+def test_a_full_question_is_not_joined_to_the_previous_turn_but_a_follow_up_is():
+    from agent.conversation import is_follow_up
+
+    store = MemoryAgentStore(TENANTS)
+    deps = _deps(store)
+    _chat(store, deps, "How do I add a new employee?")
+    _, st = _chat(store, deps, "What is the status of payroll run PR-202609?")
+    assert not st.get("context")
+    assert is_follow_up("and for contractors?") and is_follow_up("aur UAE ke liye?")
+    assert not is_follow_up("What is the status of payroll run PR-202609?")
+
+
+def test_problem_reports_are_not_offered_an_unrelated_guide():
+    store = MemoryAgentStore(TENANTS)
+    _, st = _chat(store, _deps(store), "September salary for 12 employees, bank shows pending")
+    assert st["draft_mode"] == "template" and st["sources"]["hits"] == []

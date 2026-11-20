@@ -17,6 +17,7 @@ loop for statutory answers. Built phase by phase; each phase ends at a gate reco
 | [LLD](docs/lld.md) | Stage-by-stage design, sequence diagram, failure behaviour |
 | [Build note](docs/build_note.md) | Code vs model table, patterns, models, cost line, what broke |
 | [Presentation](docs/Payce_Support_Assist_build_review.pptx) | Build review deck (11 slides) |
+| [Demo script](docs/demo_script.md) | 15-minute walkthrough: prep, scenes with exact messages, fallbacks, likely questions |
 
 **Build region:** Sydney (`ap-southeast-2`), account Agentic Core FDE. Production
 regions `ap-south-1` (India) and `me-central-1` (UAE) are kept as placeholder config.

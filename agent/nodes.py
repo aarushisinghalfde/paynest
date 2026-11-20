@@ -69,11 +69,13 @@ def normalise(state, deps: Deps):
     history, context = [], None
     cid = state.get("meta", {}).get("conversation_id")
     if cid and hasattr(deps.store, "conversation"):
-        history = deps.store.conversation(cid, state["ticket_id"])
+        history = [h for h in deps.store.conversation(cid, state["ticket_id"])
+                   if h.get("tenant_id") in (None, state.get("tenant_id"))]  # same company only
         prev = history[-1] if history else None
-        # a follow-up: the answer to our clarifying question, or a short message after a real question
+        # joined with the previous turn only when it answers our clarifying question, or is plainly
+        # a follow-up ("and for contractors?"); a new vague message gets its own clarifying question
         if prev and talk not in ("greeting", "thanks") and prev.get("route") not in ("chat", None) and (
-            prev.get("route") == "ask" or len(text.split()) <= 8
+            prev.get("route") == "ask" or (talk is None and conversation.is_follow_up(text))
         ):
             context = prev["text"]
             talk = None if talk == "vague" else talk
@@ -112,6 +114,9 @@ def dedupe(state, deps: Deps):
     if state.get("route") == "block" or not hasattr(deps.store, "recent_tickets"):
         return {"duplicate_of": None, "steps": _step(state, "dedupe")}
     text = f"{state.get('subject', '')} {state.get('body', '')}"
+    if state.get("talk") in ("greeting", "thanks", "vague") or conversation.is_howto(text):
+        # a greeting or a how-to-use question is never an outage or a resubmit
+        return {"duplicate_of": None, "steps": _step(state, "dedupe")}
     created = state.get("meta", {}).get("created_at")
     recent = deps.store.recent_tickets(state["tenant_id"], created, state["ticket_id"])
     dup, why = dd.find_duplicate(text, created, recent)
@@ -158,8 +163,9 @@ def draft(state, deps: Deps):
         if route_ == "review":  # a person approves it: all approved sources and every tool
             hits = deps.retriever.search(q, region, as_of)
             facts = tools.run_tools(state, deps.retriever.rules, as_of, deps.payroll_url)
-        else:  # sent without review: guides and run status only, never a statutory figure
-            hits = deps.retriever.search(q, region, as_of, kinds=("kb_title",))
+        else:  # sent without review: guides (how-to questions only) and run status, never a statutory figure
+            asks_how = state.get("team") == "How-To" or conversation.is_howto(q)
+            hits = deps.retriever.search(q, region, as_of, kinds=("kb_title",)) if asks_how else []
             facts = [] if queued else [f for f in tools.run_tools(state, deps.retriever.rules, as_of,
                                                                   deps.payroll_url) if f["tool"] != "get_rate"]
         d = drafter.draft(state, hits, facts, as_of, model=deps.model, rung=deps.draft_rung)  # 2. RAG

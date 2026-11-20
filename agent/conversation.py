@@ -2,6 +2,7 @@
 
 kind(text) -> "greeting" | "thanks" | "vague" | None
 is_howto(text) -> True for a how-to-use question with no sign of a problem
+is_follow_up(text) -> True for a message that only makes sense with the previous turn
   greeting / thanks  a short message that is only that ("hi", "thanks!", "नमस्ते", "مرحبا")
   vague              three words or fewer with no topic we can act on ("payment delayed")
 The router turns these into the chat and ask routes: a conversational reply or one
@@ -46,3 +47,12 @@ PROBLEM = re.compile(
 
 def is_howto(text: str) -> bool:
     return bool(HOWTO.search(text or "")) and not PROBLEM.search(text or "")
+
+
+FOLLOW_UP = re.compile(r"^\s*(and|also|what about|how about|same for|for|but|aur|और|भी|و|وماذا|ماذا عن)\b", re.I)
+
+
+def is_follow_up(text: str) -> bool:
+    """A message that only makes sense with the previous one: "and for contractors?", "aur UAE ke liye?"."""
+    t = _clean(text)
+    return bool(FOLLOW_UP.match(t)) or (0 < len(t.split()) <= 4 and not TOPIC_HINT.search(t) and kind(t) is None)

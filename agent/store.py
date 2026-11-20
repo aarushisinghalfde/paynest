@@ -80,13 +80,14 @@ class PgAgentStore(PgTicketStore):
             rows = conn.execute(
                 """SELECT t.id::text, coalesce(t.masked_body, ''), t.route,
                           (SELECT body_masked FROM sent_replies s WHERE s.ticket_id = t.id
-                            ORDER BY draft_version DESC LIMIT 1)
+                            ORDER BY draft_version DESC LIMIT 1), t.tenant_id
                    FROM tickets t
                    WHERE t.conversation_id = %s AND t.id <> %s AND t.status = 'masked'
                      AND t.created_at <= (SELECT created_at FROM tickets WHERE id = %s)
                    ORDER BY t.created_at DESC LIMIT %s""",
                 (conversation_id, ticket_id, ticket_id, limit)).fetchall()
-        return [{"ticket_id": i, "text": b, "route": r, "reply": rep} for i, b, r, rep in reversed(rows)]
+        return [{"ticket_id": i, "text": b, "route": r, "reply": rep, "tenant_id": tn}
+                for i, b, r, rep, tn in reversed(rows)]
 
     # ---- phase 7: recent tickets, incidents, Jira ------------------------------------
     def recent_tickets(self, tenant_id, created_at, exclude_id, hours: int = 72):
@@ -243,6 +244,7 @@ class MemoryAgentStore(MemoryTicketStore):
         upto = order[: order.index(ticket_id)] if ticket_id in order else order
         turns = [
             {"ticket_id": i, "text": self.tickets[i].get("masked_body") or "", "route": self.tickets[i].get("route"),
+             "tenant_id": self.tickets[i].get("tenant_id"),
              "reply": next((r["body"] for (t, _v), r in sorted(self.sent.items(), reverse=True) if t == i), None)}
             for i in upto
             if self.tickets[i].get("conversation_id") == conversation_id and self.tickets[i].get("status") == "masked"
