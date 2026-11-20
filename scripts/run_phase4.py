@@ -46,8 +46,11 @@ def main() -> int:
     print(f"labelled set: {json.dumps(result['labelled_set'])}")
     for g in result["gates"]:
         print(f"{'PASS' if g['pass'] else 'FAIL'}  {g['gate']}: {g['detail']}")
-    path = remote.download_labelled(ROOT / "evals" / "local" / "labelled_set_v1.json")
-    print(f"masked labelled set saved to {path.relative_to(ROOT)} (git-ignored)")
+    if result["labelled_set"].get("uploaded", True):
+        path = remote.download_labelled(ROOT / "evals" / "local" / "labelled_set_v1.json")
+        print(f"masked labelled set saved to {path.relative_to(ROOT)} (git-ignored)")
+    else:
+        print("labelled set NOT uploaded (the data load itself is done); see upload_error above")
     return 0 if all(g["pass"] for g in result["gates"]) else 1
 
 

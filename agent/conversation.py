@@ -1,0 +1,35 @@
+"""Chat behaviour that is not a support ticket: greetings, thanks, and messages too vague to act on.
+
+kind(text) -> "greeting" | "thanks" | "vague" | None
+  greeting / thanks  a short message that is only that ("hi", "thanks!", "नमस्ते", "مرحبا")
+  vague              three words or fewer with no topic we can act on ("payment delayed")
+The router turns these into the chat and ask routes: a conversational reply or one
+clarifying question, instead of a ticket acknowledgement.
+"""
+
+import re
+
+GREETING = re.compile(
+    r"^(hi+|hello+|hey+|hiya|yo|namaste|namaskar|salaam|salam|marhaba|good (morning|afternoon|evening)"
+    r"|नमस्ते|नमस्कार|مرحبا|السلام عليكم|اهلا|أهلا)( there| team| payce)?$", re.I)
+THANKS = re.compile(
+    r"^(thanks?( you)?( so much| a lot)?|thx|ty|ok(ay)?( thanks?)?|great|cool|got it|perfect|bye|shukriya"
+    r"|dhanyavaad|dhanyawad|धन्यवाद|शुक्रिया|شكرا|شكراً)$", re.I)
+TOPIC_HINT = re.compile(r"\d|\b(pf|epf|esi|tds|wps|sif|payslip|salary|run|pt|gratuity|ecr|invoice|login|password)\b", re.I)
+
+
+def _clean(text: str) -> str:
+    return re.sub(r"[\s!.,?¡¿؟।]+", " ", text or "").strip()
+
+
+def kind(text: str) -> str | None:
+    t = _clean(text)
+    if not t:
+        return "vague"
+    if GREETING.match(t):
+        return "greeting"
+    if THANKS.match(t):
+        return "thanks"
+    if len(t.split()) <= 3 and not TOPIC_HINT.search(t):
+        return "vague"
+    return None

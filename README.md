@@ -25,7 +25,7 @@ they live in your `.env` and in SSM under `/paynest/demo/`.
 | Home | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com |
 | Customer chat | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/chat |
 | Reviewer console | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/review (paste `ADMIN_TOKEN` from `.env`) |
-| Health | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/health |
+| API health | https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/api/health (the API is under `/api/`) |
 
 **Code**
 

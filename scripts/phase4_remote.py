@@ -52,8 +52,31 @@ def zip_data_room(root: Path) -> tuple[bytes, list[str]]:
     return buf.getvalue(), names
 
 
+def s3_presigner():
+    """S3 client for the presigned URLs the EC2 uses.
+
+    SigV4 (required for SSE-KMS objects), Sydney's own endpoint (no redirect from the global
+    one, which would break the signature), and no flexible checksums: botocore 1.36+ adds
+    checksum parameters to presigned PUTs that a plain urllib upload cannot satisfy.
+    """
+    from botocore.config import Config
+
+    opts = {"signature_version": "s3v4", "s3": {"addressing_style": "virtual"}}
+    try:
+        cfg = Config(
+            **opts, request_checksum_calculation="when_required", response_checksum_validation="when_required"
+        )
+    except TypeError:  # botocore older than 1.36 has no flexible checksums at all
+        cfg = Config(**opts)
+    if _session is None:
+        aws("sts")
+    return _session.client(
+        "s3", region_name=REGION, endpoint_url=f"https://s3.{REGION}.amazonaws.com", config=cfg
+    )
+
+
 def upload_and_presign(data: bytes, want_put: bool) -> tuple[str, str | None]:
-    s3 = aws("s3")
+    s3 = s3_presigner()
     s3.put_object(Bucket=BUCKET, Key=RAW_KEY, Body=data)  # bucket default: SSE-KMS
     get_url = s3.generate_presigned_url(
         "get_object", Params={"Bucket": BUCKET, "Key": RAW_KEY}, ExpiresIn=900

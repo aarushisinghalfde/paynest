@@ -75,7 +75,7 @@ def test_redelivered_message_after_completion_sends_nothing_twice():
 
 def test_unknown_tenant_goes_to_the_queue_and_blocked_ticket_gets_a_holding_reply(monkeypatch):
     store, deps, cps = make()
-    tid = store.create("C-9999", "chat", "hello", None)
+    tid = store.create("C-9999", "chat", "Salary not credited for three employees this month", None)
     assert run(tid, deps, cps)["route"] == "queue"
     tid2 = store.create("C-1001", "chat", "hello", None)
     store.tickets[tid2]["status"] = "pii_blocked"

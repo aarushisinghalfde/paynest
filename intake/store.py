@@ -34,6 +34,7 @@ PUBLIC_FIELDS = (
     "route",
     "route_reason",
     "team",
+    "ticket_ref",
 )
 
 
@@ -163,4 +164,4 @@ class MemoryTicketStore:
 
     def get(self, ticket_id):
         t = self.tickets.get(ticket_id)
-        return {k: t[k] for k in PUBLIC_FIELDS} if t else None
+        return {k: t.get(k) for k in PUBLIC_FIELDS} if t else None

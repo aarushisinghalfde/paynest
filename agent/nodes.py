@@ -1,17 +1,23 @@
 """The graph's nodes. Each takes the state and returns only the fields it changes.
 
-Phase 5 stand-ins (marked): classify is keyword-only, route has one rule, draft is a
-fixed template, output_guard checks the schema only. pii_gate, normalise and
-resolve_tenant are real. Every node is idempotent, so re-running one after a crash is safe.
+draft (phase 8) writes from retrieved sources and tool facts when a retriever is set, for
+the reply and review routes (review: a person approves it first), and offers a matching
+guide on queued tickets; it falls back to the acknowledgement when the sources do not
+answer the question; other routes, or no retriever, get the fixed templates.
+output_guard (phase 9) runs agent.guard on every draft; a failed draft is never sent, it
+goes to a reviewer with the problems. Every node is idempotent, so re-running one after a
+crash is safe. Every node is traced (shared/tracing.py, phase 11).
 """
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from agent import conversation, drafter, injection, keywords, retrieval, router, templates, tools
 from agent import dedupe as dd
-from agent import injection, keywords, router, templates
+from agent import guard as out_guard
 from intake.pipeline import process_ticket
 from loader.normalize import language
+from shared.tracing import traced
 
 
 @dataclass
@@ -21,6 +27,10 @@ class Deps:
     hmac_key: bytes
     ttl_days: int = 30
     classifier: object = None  # agent.classifier.Classifier (phase 6); keywords only when None
+    retriever: object = None  # agent.retrieval.Retriever (phase 8); templates only when None
+    model: object = None  # agent.models.ModelClient for drafting; the cited fallback when None
+    payroll_url: str | None = None  # payroll API for get_run_status
+    draft_rung: int = 1
 
 
 def _step(state, name):
@@ -49,7 +59,8 @@ def pii_gate(state, deps: Deps):
 
 def normalise(state, deps: Deps):
     text = " ".join(f"{state.get('subject', '')} {state.get('body', '')}".split())
-    return {"language": language(text), "injection_rules": injection.detect(text), "steps": _step(state, "normalise")}
+    return {"language": language(text), "injection_rules": injection.detect(text), "talk": conversation.kind(text),
+            "steps": _step(state, "normalise")}
 
 
 def resolve_tenant(state, deps: Deps):
@@ -99,30 +110,67 @@ def route(state, deps: Deps):
             "steps": _step(state, "route")}
 
 
-def draft(state, deps: Deps):  # phase 5-7: templates per route; phase 8 drafts from sources
+def _iso(v):
+    return v.isoformat() if hasattr(v, "isoformat") else v
+
+
+def draft(state, deps: Deps):
     ref = state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8]
-    kind = {"block": "blocked", "incident": "incident", "duplicate": "duplicate"}.get(state.get("route"), "ack")
+    route_ = state.get("route")
+    out = {"draft_version": state.get("draft_version", 0) + 1, "steps": _step(state, "draft")}
+    queued = route_ == "queue" and state.get("tenant") is not None  # triage/pod queue, known tenant
+    if deps.retriever is not None and (route_ in ("reply", "review") or queued):
+        q = f"{state.get('subject', '')} {state.get('body', '')}"
+        as_of = retrieval.question_date(q, state.get("meta", {}).get("created_at"))
+        region = (state.get("tenant") or {}).get("region")
+        if queued:  # a team picks it up; meanwhile offer a matching guide, never a statutory figure
+            hits, facts = deps.retriever.search(q, region, as_of, kinds=("kb_title",)), []
+        else:
+            hits = deps.retriever.search(q, region, as_of)
+            facts = tools.run_tools(state, deps.retriever.rules, as_of, deps.payroll_url)
+        d = drafter.draft(state, hits, facts, as_of, model=deps.model, rung=deps.draft_rung)
+        sources = {"as_of": as_of.isoformat(), "hits": [{k: _iso(v) for k, v in h.items()} for h in hits],
+                   "facts": facts}
+        if d:
+            return {**out, "draft": d["reply"], "draft_mode": d["mode"], "citations": d["citations"],
+                    "sources": sources}
+        out["sources"] = sources
+    kind = {"block": "blocked", "incident": "incident", "duplicate": "duplicate", "ask": "clarify",
+            "chat": "thanks" if state.get("talk") == "thanks" else "greeting"}.get(route_, "ack")
     text = templates.render(kind, state.get("language", "en"), ref=ref, team=state.get("team") or "support",
                             duplicate_of=state.get("duplicate_of") or "")
-    return {"draft": text, "draft_version": state.get("draft_version", 0) + 1, "steps": _step(state, "draft")}
+    return {**out, "draft": text, "draft_mode": "template"}
 
 
-def output_guard(state, deps: Deps):  # phase 5 stand-in: schema only
-    d = state.get("draft")
-    problems = []
-    if not isinstance(d, str) or not d.strip():
-        problems.append("empty draft")
-    elif len(d) > 4000:
-        problems.append("draft too long")
-    return {"guard": {"ok": not problems, "problems": problems}, "steps": _step(state, "output_guard")}
+def output_guard(state, deps: Deps):
+    src = state.get("sources") or {}
+    as_of = src.get("as_of")
+    result = out_guard.check(
+        state.get("draft"),
+        ticket_text=f"{state.get('subject', '')} {state.get('body', '')}",
+        region=(state.get("tenant") or {}).get("region"),
+        language=state.get("language", "en"),
+        hits=src.get("hits"),
+        facts=src.get("facts"),
+        as_of=retrieval._as_date(as_of) if as_of else None,
+        ref=state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8],
+    )
+    return {"guard": result, "steps": _step(state, "output_guard")}
 
 
 def send(state, deps: Deps):
-    if not state.get("guard", {}).get("ok"):
-        deps.store.save_progress(state["ticket_id"], agent_status="failed", route_reason="output guard failed")
-        return {"sent": False, "steps": _step(state, "send")}
     common = dict(route=state.get("route"), route_reason=state.get("route_reason"),
                   classification=state.get("classification"), team=state.get("team"), language=state.get("language"))
+    g = state.get("guard", {})
+    if not g.get("ok"):
+        reason = "output guard: " + ", ".join(g.get("problems") or ["failed"])
+        if hasattr(deps.store, "create_review") and state.get("draft"):
+            # never sent: a person sees the draft and the problems, and fixes or rejects it
+            deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], reason)
+            deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **{**common, "route_reason": reason})
+            return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
+        deps.store.save_progress(state["ticket_id"], agent_status="failed", route_reason=reason)
+        return {"sent": False, "steps": _step(state, "send")}
     if state.get("route") == "review" and hasattr(deps.store, "create_review"):
         # a human approves before anything is sent (statutory, P1, known issue)
         deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], state.get("route_reason"))
@@ -134,13 +182,16 @@ def send(state, deps: Deps):
 
 
 NODE_FUNCS = {
-    "pii_gate": pii_gate,
-    "normalise": normalise,
-    "resolve_tenant": resolve_tenant,
-    "classify": classify,
-    "dedupe": dedupe,
-    "route": route,
-    "draft": draft,
-    "output_guard": output_guard,
-    "send": send,
+    name: traced(name)(fn)
+    for name, fn in {
+        "pii_gate": pii_gate,
+        "normalise": normalise,
+        "resolve_tenant": resolve_tenant,
+        "classify": classify,
+        "dedupe": dedupe,
+        "route": route,
+        "draft": draft,
+        "output_guard": output_guard,
+        "send": send,
+    }.items()
 }

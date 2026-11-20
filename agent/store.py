@@ -148,6 +148,20 @@ class PgAgentStore(PgTicketStore):
                          ("replied" if decision == "approve" else "taken_over", ticket_id))
         return ticket_id
 
+    def knowledge(self) -> tuple[list[dict], list[dict]]:
+        """(kb_chunks, statutory_rules) for the retriever; loaded once at worker start."""
+        with self._conn() as conn:
+            chunks = [r[0] for r in conn.execute(
+                """SELECT json_build_object('chunk_id', chunk_id, 'kb_id', kb_id, 'source_kind', source_kind,
+                          'region', region, 'topic', topic, 'language', language, 'title', title,
+                          'content', content, 'effective_from', effective_from, 'effective_to', effective_to,
+                          'superseded_by', superseded_by) FROM kb_chunks""").fetchall()]
+            rules = [r[0] for r in conn.execute(
+                """SELECT json_build_object('rule_id', rule_id, 'region', region, 'topic', topic, 'title', title,
+                          'effective_from', effective_from, 'old_value', old_value, 'new_value', new_value,
+                          'affects_kb_topics', affects_kb_topics, 'source', source) FROM statutory_rules""").fetchall()]
+        return chunks, rules
+
     def insert_reply(self, ticket_id: str, draft_version: int, body: str, channel: str) -> bool:
         """True if this call sent it; False if (ticket, version) was already sent."""
         with self._conn() as conn:

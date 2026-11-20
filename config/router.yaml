@@ -1,6 +1,7 @@
 # The router: plain rules, first match wins (build plan section 2: "routed by code").
 # Each rule names the facts it needs; `reason` is what the reviewer and the trace show.
-# Routes: block, incident, duplicate, review (draft + human approval), reply (auto), queue.
+# Routes: block, incident, duplicate, review (draft + human approval), reply (auto), queue,
+# chat (greeting/thanks: conversational reply), ask (one clarifying question).
 rules:
   - id: R01-injection
     when: {injection: true}
@@ -10,6 +11,14 @@ rules:
     when: {pii_blocked: true}
     route: block
     reason: "PII re-scan quarantined the ticket"
+  - id: R03a-smalltalk
+    when: {smalltalk: true}
+    route: chat
+    reason: "greeting or thanks: conversational reply, nothing to route"
+  - id: R03b-too-vague
+    when: {vague: true}
+    route: ask
+    reason: "too little detail to route: one clarifying question first"
   - id: R03-unknown-tenant
     when: {tenant_known: false}
     route: queue

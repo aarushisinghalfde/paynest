@@ -137,7 +137,9 @@ def get_ticket(ticket_id: str) -> dict:
         raise HTTPException(404, "ticket not found")
     if ticket["status"] != "masked":
         ticket["masked_body"] = None  # nothing to show until the gate has passed it
-    ticket["replies"] = get_store().replies(ticket_id)
+    from agent.unmask import customer_view
+
+    ticket["replies"] = [{**r, "body": customer_view(r["body"])} for r in get_store().replies(ticket_id)]
     return ticket
 
 

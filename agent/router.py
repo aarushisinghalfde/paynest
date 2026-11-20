@@ -25,6 +25,8 @@ def facts_from_state(state: dict) -> dict:
         "jira": bool(state.get("jira_key")), "jira_key": state.get("jira_key"),
         "team": state.get("team"), "second": c.get("second"), "branch": c.get("branch", "auto"),
         "priority_signal": bool(c.get("priority_signal")),
+        "smalltalk": state.get("talk") in ("greeting", "thanks"),
+        "vague": state.get("talk") == "vague",
     }
 
 

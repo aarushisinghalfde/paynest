@@ -50,6 +50,9 @@ VAULT_TTL_DAYS = int(_env("VAULT_TTL_DAYS", "30"))
 MAX_TICKET_CHARS = 20000
 # Reviewer console and other admin endpoints: requests must send X-Admin-Token. Empty = disabled.
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+# Phase 8: drafting from sources (off = fixed templates only) and the payroll API for tools.
+DRAFTING = os.environ.get("DRAFTING", "on")
+PAYROLL_API_URL = os.environ.get("PAYROLL_API_URL", "http://mock-payroll-api:8081")
 
 
 def load_region(name: str | None = None) -> dict:

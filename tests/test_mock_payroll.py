@@ -19,6 +19,13 @@ def test_health():
     assert client.get("/health").status_code == 200
 
 
-def test_run_status_stub():
-    body = client.get("/runs/RUN-1/status").json()
-    assert body == {"run_id": "RUN-1", "status": "completed", "stub": True}
+def test_run_status_is_deterministic_and_on_the_openapi_path():
+    a = client.get("/payroll-runs/PR-202609/status").json()
+    assert a == client.get("/payroll-runs/PR-202609/status").json()
+    assert a["run_id"] == "PR-202609" and a["status"] in {"completed", "processing", "failed"}
+    assert client.get("/runs/PR-202609/status").json() == a  # phase 1 path still works
+
+
+def test_run_status_rate_limit():
+    r = client.get("/payroll-runs/PR-1-429/status")
+    assert r.status_code == 429 and r.headers["retry-after"] == "2"

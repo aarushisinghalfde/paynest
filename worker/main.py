@@ -112,8 +112,18 @@ def build_gate():
     client = ModelClient(ledger=PgLedger(settings.DATABASE_URL))
     classifier = Classifier(similar_from_db(settings.DATABASE_URL), client if client.key else None,
                             rung=config().get("defaults", {}).get("classify", 0))
-    deps = Deps(PgAgentStore(settings.DATABASE_URL), from_settings(settings), settings.PII_HMAC_KEY.encode(),
-                settings.VAULT_TTL_DAYS, classifier=classifier)
+    store = PgAgentStore(settings.DATABASE_URL)
+    retriever = None
+    if settings.DRAFTING == "on":
+        from agent.retrieval import Retriever
+
+        chunks, rules = store.knowledge()
+        retriever = Retriever(chunks, rules)
+        log_event(log, "knowledge_loaded", chunks=len(chunks), rules=len(rules))
+    deps = Deps(store, from_settings(settings), settings.PII_HMAC_KEY.encode(),
+                settings.VAULT_TTL_DAYS, classifier=classifier, retriever=retriever,
+                model=client if client.key else None, payroll_url=settings.PAYROLL_API_URL,
+                draft_rung=config().get("defaults", {}).get("draft", 1))
     graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))
     return lambda ticket_id: agent_graph.run(graph, ticket_id)
 

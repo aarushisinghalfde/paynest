@@ -30,10 +30,22 @@ class TicketState(TypedDict, total=False):
     confidence: float
     classification: dict
     duplicate_of: str | None
-    route: str  # reply | queue | block
+    route: str  # reply | review | queue | block | incident | duplicate | chat | ask
     route_reason: str
+    route_rule: str
+    queue: str | None
+    injection_rules: list[str]
+    talk: str | None  # greeting | thanks | vague (agent/conversation.py)
+    duplicate_reason: str | None
+    incident_id: str | None
+    incident_size: int
+    jira_key: str | None
+    waiting_review: bool
     draft: str | None
     draft_version: int
+    draft_mode: str  # model | fallback | template
+    citations: list[str]
+    sources: dict  # {"as_of", "hits", "facts"}: what the draft was allowed to use (phase 8)
     guard: dict
     sent: bool
     steps: list[str]  # node names run, in order (for tests and the "why" timeline)

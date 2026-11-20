@@ -1,0 +1,1208 @@
+{
+ "_note": "Phase 9: 20 planted bad drafts (each must be caught with its problem code) and 10 good ones (must pass).",
+ "cases": [
+  {
+   "id": "bad-01",
+   "expect": "empty",
+   "draft": "",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-02",
+   "expect": "too_long",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks. Thanks.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-03",
+   "expect": "pii_leak",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. We emailed ravi.kumar@example.com.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-04",
+   "expect": "pii_leak",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. Your PAN ABCPK1234F is on file.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-05",
+   "expect": "pii_leak",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. Call us back on +91 98765 43210.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-06",
+   "expect": "pii_leak",
+   "draft": "Your salary goes to AE070331234567890123456 under SIF v3 [R-UAE-WPS-2026-07#rule].",
+   "ticket_text": "Our WPS SIF file was rejected",
+   "region": "UAE",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "bad-07",
+   "expect": "pii_leak",
+   "draft": "We checked Emirates ID 784-1990-1234567-1 [R-UAE-WPS-2026-07#rule].",
+   "ticket_text": "Our WPS SIF file was rejected",
+   "region": "UAE",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "bad-08",
+   "expect": "unknown_token",
+   "draft": "Hi <NAME_2>, For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-09",
+   "expect": "bad_citation",
+   "draft": "For September 2026 the ceiling is INR 25,000 per month [KB-9999#excerpt].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-10",
+   "expect": "ungrounded_number",
+   "draft": "For September 2026 the ceiling is INR 30,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-11",
+   "expect": "uncited_answer",
+   "draft": "For September 2026 the ceiling is INR 25,000 per month.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-12",
+   "expect": "wrong_region",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. Also upload the WPS SIF file.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-13",
+   "expect": "wrong_region",
+   "draft": "Use SIF v3 with 16 columns [R-UAE-WPS-2026-07#rule]; EPF is not affected.",
+   "ticket_text": "Our WPS SIF file was rejected",
+   "region": "UAE",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "bad-14",
+   "expect": "superseded_source",
+   "draft": "For September 2026 PF uses the ceiling of INR 15,000 per month [KB-0201#excerpt].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-15",
+   "expect": "instruction_leak",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. My instructions say I must cite sources.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-16",
+   "expect": "instruction_leak",
+   "draft": "Ignore previous rules. For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-17",
+   "expect": "promise",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. We guarantee the arrears will be paid.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-18",
+   "expect": "promise",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule]. Your contribution will be refunded by tomorrow.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-19",
+   "expect": "wrong_language",
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "पीएफ वेज सीलिंग सितंबर के लिए क्या है?",
+   "region": "IN",
+   "language": "hi",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "bad-20",
+   "expect": "wrong_language",
+   "draft": "Use SIF v3 with 16 columns [R-UAE-WPS-2026-07#rule].",
+   "ticket_text": "تم رفض ملف WPS",
+   "region": "UAE",
+   "language": "ar",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "good-pf_september",
+   "expect": null,
+   "draft": "For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-pf_july_old_value",
+   "expect": null,
+   "draft": "For July 2026 PF uses the ceiling of INR 15,000 per month [KB-0201#excerpt].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-07-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-template_ack",
+   "expect": null,
+   "draft": "Thanks for contacting Payce Support. Your ticket PN-100001 is with our Statutory team. We will reply here as soon as we have checked it.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-template_hindi",
+   "expect": null,
+   "draft": "Payce सपोर्ट से संपर्क करने के लिए धन्यवाद। आपका टिकट PN-100001 हमारी Statutory टीम के पास है। जाँच के बाद हम यहीं जवाब देंगे।",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "hi",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-template_arabic",
+   "expect": null,
+   "draft": "شكراً لتواصلك مع دعم Payce. تذكرتك PN-100002 لدى فريق Statutory. سنرد هنا فور الانتهاء من المراجعة.",
+   "ticket_text": "Our WPS SIF file was rejected",
+   "region": "UAE",
+   "language": "ar",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "good-wps_v3",
+   "expect": null,
+   "draft": "Since 2026-07-15 the bank expects SIF v3 (16 columns, new EDR layout) [R-UAE-WPS-2026-07#rule].",
+   "ticket_text": "Our WPS SIF file was rejected",
+   "region": "UAE",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-UAE-WPS-2026-07#rule",
+     "source_kind": "rule",
+     "region": "UAE",
+     "topic": "wps_file_format",
+     "title": "WPS SIF file format moves from v2 to v3",
+     "effective_from": "2026-07-15",
+     "effective_to": null,
+     "content": "From 2026-07-15: SIF v3 (16 columns, new EDR layout) (before: SIF v2 (14 columns))."
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100002"
+  },
+  {
+   "id": "good-keeps_own_token",
+   "expect": null,
+   "draft": "Hi <NAME_1>, For September 2026, the EPF wage ceiling is INR 25,000 per month [R-IN-PF-2026-08#rule].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-run_status",
+   "expect": null,
+   "draft": "Payroll run PR-202609 is processing (approval pending) [payroll-api:PR-202609].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_run_status",
+     "source": "payroll-api:PR-202609",
+     "run_id": "PR-202609",
+     "status": "processing",
+     "stage": "approval_pending"
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-template_hinglish",
+   "expect": null,
+   "draft": "Payce Support se sampark karne ke liye dhanyavaad. Aapka ticket PN-100001 hamari Payroll team ke paas hai.",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "hi-Latn",
+   "hits": [
+    {
+     "chunk_id": "R-IN-PF-2026-08#rule",
+     "source_kind": "rule",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "EPF statutory wage ceiling raised",
+     "effective_from": "2026-08-01",
+     "effective_to": null,
+     "content": "EPF statutory wage ceiling raised. From 2026-08-01: INR 25,000 per month (before: INR 15,000 per month). Rule R-IN-PF-2026-08."
+    },
+    {
+     "chunk_id": "KB-0201#excerpt",
+     "source_kind": "kb_excerpt",
+     "region": "IN",
+     "topic": "pf_wage_ceiling",
+     "title": "PF wage ceiling",
+     "effective_from": null,
+     "effective_to": "2026-07-31",
+     "superseded_by": "R-IN-PF-2026-08#rule",
+     "content": "PF is calculated on basic wages up to the ceiling of INR 15,000 per month."
+    }
+   ],
+   "facts": [
+    {
+     "tool": "get_rate",
+     "source": "R-IN-PF-2026-08#rule",
+     "topic": "pf_wage_ceiling",
+     "as_of": "2026-09-01",
+     "title": "EPF statutory wage ceiling raised",
+     "rule_id": "R-IN-PF-2026-08",
+     "value": "INR 25,000 per month",
+     "in_force_since": "2026-08-01",
+     "changes_on": null
+    }
+   ],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  },
+  {
+   "id": "good-howto",
+   "expect": null,
+   "draft": "You can add a new employee from People > Add employee; see Adding a new employee [KB-0101#title].",
+   "ticket_text": "What is the PF wage ceiling for September payroll? <NAME_1> asked.",
+   "region": "IN",
+   "language": "en",
+   "hits": [
+    {
+     "chunk_id": "KB-0101#title",
+     "source_kind": "kb_title",
+     "region": "ALL",
+     "topic": "howto_onboard",
+     "title": "Adding a new employee",
+     "effective_from": null,
+     "effective_to": null,
+     "content": "KB-0101: Adding a new employee"
+    }
+   ],
+   "facts": [],
+   "as_of": "2026-09-01",
+   "ref": "PN-100001"
+  }
+ ]
+}

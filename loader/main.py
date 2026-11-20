@@ -12,8 +12,10 @@ printed is PHASE4_JSON=<summary and gates>, read by the laptop script.
 import argparse
 import io
 import json
+import re
 import sys
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -25,9 +27,32 @@ from shared.logs import configure, log_event, safe_error
 MARKER = "PHASE4_JSON="
 
 
+class S3HttpError(RuntimeError):
+    """A presigned S3 request failed. Carries only the step, HTTP status and S3 error code."""
+
+    def __init__(self, step: str, status: int, code: str):
+        super().__init__(f"{step}: HTTP {status} {code}")
+        self.step, self.status, self.code = step, status, code
+
+    def fields(self) -> dict:
+        return {"error": "S3HttpError", "step": self.step, "status": self.status, "s3_code": self.code}
+
+
+def s3_error_code(body: bytes) -> str:
+    m = re.search(rb"<Code>([A-Za-z0-9.]{1,64})</Code>", body or b"")
+    return m.group(1).decode() if m else "unknown"
+
+
+def _urlopen(req, step: str):
+    try:
+        return urllib.request.urlopen(req, timeout=60)  # noqa: S310 - presigned S3 URL
+    except urllib.error.HTTPError as e:
+        raise S3HttpError(step, e.code, s3_error_code(e.read(4000))) from None
+
+
 def read_zip(url: str | None = None, path: str | None = None) -> dict[str, str]:
     if url:
-        with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 - presigned S3 URL
+        with _urlopen(url, "get_raw_zip") as resp:
             data = resp.read()
     else:
         with open(path, "rb") as fh:
@@ -43,7 +68,7 @@ def read_zip(url: str | None = None, path: str | None = None) -> dict[str, str]:
 def put_json(url: str, payload) -> None:
     body = json.dumps(payload, ensure_ascii=False, indent=1).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="PUT", headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60):  # noqa: S310
+    with _urlopen(req, "put_labelled_set"):
         pass
 
 
@@ -75,8 +100,12 @@ def cmd_load(args) -> dict:
         db.write(conn, builder_rows, ds.summary)
     tenants = {t["tenant_id"]: t for t in ds.tables["tenants"]}
     labelled_rows = labelled.export_rows(labelled.stratified(ds.tables["tickets"]), tenants)
+    upload_error = None
     if args.put_url:
-        put_json(args.put_url, labelled_rows)
+        try:
+            put_json(args.put_url, labelled_rows)
+        except S3HttpError as e:  # the data is already loaded; only the export failed
+            upload_error = e.fields()
     gates = verify.gates(raw, ds.tables)
     return {
         "command": "load",
@@ -84,7 +113,8 @@ def cmd_load(args) -> dict:
         "summary": ds.summary,
         "labelled_set": {
             "rows": len(labelled_rows),
-            "uploaded": bool(args.put_url),
+            "uploaded": bool(args.put_url) and upload_error is None,
+            "upload_error": upload_error,
             "moved": sum(r["moved"] for r in labelled_rows),
             "by_language": _count(labelled_rows, "language"),
             "by_team": _count(labelled_rows, "data_label"),
@@ -128,8 +158,9 @@ def main(argv=None) -> int:
     try:
         result = cmd_load(args) if args.command == "load" else cmd_verify(args)
     except Exception as exc:  # noqa: BLE001 - report type and place only, never data
-        result = {"command": args.command, "error": safe_error(exc)}
-        log_event(__import__("logging").getLogger("loader"), "load_failed", 40, **safe_error(exc))
+        err = exc.fields() if isinstance(exc, S3HttpError) else safe_error(exc)
+        result = {"command": args.command, "error": err}
+        log_event(__import__("logging").getLogger("loader"), "load_failed", 40, **err)
     print(MARKER + json.dumps(result, default=str, ensure_ascii=False), flush=True)
     return 0 if "error" not in result and all(g["pass"] for g in result.get("gates", [])) else 1
 
