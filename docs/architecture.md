@@ -104,6 +104,8 @@ flowchart TB
 | 6 | `ec2` | t4g.small (AL2023 arm64), Elastic IP, encrypted disk, IMDSv2; boot script installs Docker and a `paynest` systemd service; grants read access to the DB secret. | Deployed |
 | 7a | `apigw` | Public HTTPS URL via an API Gateway HTTP API; a VPC Link (private subnets) plus Cloud Map reaches the EC2 private IP on port 80; rate limit 20 req/s. Limits: 30 s per request, no WebSockets. | **Deployed** (live URL) |
 | 7b | `cloudfront` | Distribution `https://<id>.cloudfront.net` in front of the EC2 (WebSockets, edge caching of `/assets/*`). | Written; **blocked** until AWS verifies the account |
+| 8 | `vault` | PII vault: DynamoDB `paynest-demo-pii-vault` (on-demand, TTL, retained), vault KMS key `alias/paynest-demo-vault` (admin cannot use it; EC2 Encrypt only, Lambda Decrypt only, both bound to the `{ticket_id, token, tenant_id}` context), `paynest-demo-vault-reveal` Lambda (outside the VPC, audited, 90-day log), EC2 policy (PutItem + Encrypt; explicit deny on read and decrypt), SSM worker settings (`VAULT_*`, `PII_NER=required`). | Written (3b-2), awaiting approval |
+| 9 | `observability` | Log group `/paynest/demo/app` (14 days), EC2 permission to write it, metric filters on the JSON events (PiiBlocked, TicketsMasked, MaskLatencyMs, MaskedWithoutNer, WorkerFailures), 4 alarms (pii-blocked, pii-ner-off, worker-failures, tickets-dlq-not-empty), optional email via SNS. | Written (3b-2), awaiting approval |
 
 Every template has a `Rules` check: `params/india.json` and `params/uae.json`
 (`Deployable=false`) can be validated but never deployed. Stacks share values through
@@ -112,8 +114,12 @@ another still uses; delete newest first.
 
 ### How the EC2 starts the app
 
-1. Boot script installs Docker and Docker Compose, writes non-secret settings to
-   `/opt/paynest/settings`, the production compose file, and the `paynest` systemd unit.
+1. Boot script (runs at **every** boot since 3b-2, via cloud-init `scripts-user, always`;
+   it is idempotent) sets Docker's log driver to CloudWatch (`awslogs`, non-blocking),
+   installs Docker and Docker Compose, writes non-secret settings to
+   `/opt/paynest/settings`, the production compose file, and the `paynest` systemd unit,
+   then restarts the service. Changing the user data makes CloudFormation stop and start
+   the instance (same private IP and Elastic IP), which applies the change.
 2. On every start, `paynest.service`:
    - reads `/paynest/demo/*` from SSM and the DB password from Secrets Manager into
      `/run/paynest/app.env` (memory only, wiped at every stop);
@@ -293,6 +299,10 @@ flowchart LR
 | CI and release separated; release needs a version tag | `.github/workflows/` |
 | Placeholder regions cannot be deployed | `Rules` in every template |
 | S3 data retained and RDS snapshotted if a stack is deleted | `data`, `rds` |
+| PII masked before anything reads a ticket; re-scan quarantines leaks | `intake/pipeline.py` |
+| Raw values only in the vault: separate KMS key, EC2 write-only (explicit deny on read and decrypt), admin cannot decrypt, reveal Lambda audited | `vault` |
+| Logs carry ids, kinds and counts, never values; exception messages dropped | `shared/logs.py` |
+| Alarms on quarantined tickets, NER off, worker failures, DLQ | `observability` |
 
 ---
 
@@ -307,6 +317,8 @@ flowchart LR
 | Elastic IP | about USD 0.12 per day | same (charged while stopped) |
 | API Gateway (about USD 1 per million requests), VPC Link, Cloud Map | cents per month | same |
 | GitHub Actions | free (public repo) | - |
+| Vault: DynamoDB on demand, vault KMS key, Lambda | about USD 1 per month (mostly the key) | same |
+| CloudWatch: 4 alarms, 5 log-based metrics, small log volume | about USD 2 per month | same |
 
 EC2 and RDS are started only for work sessions and demos (start/stop scripts planned).
 
@@ -327,6 +339,8 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **PII: own recognisers as the gate, Presidio + spaCy `en_core_web_sm` for names** | Checksum-validated rules are deterministic and cover IDs Presidio lacks (Emirates ID, UAN, native digits); spaCy finds mid-sentence English and Hinglish names. The small model keeps RAM low on the t4g.small. |
 | 20 Nov | **PII vault in DynamoDB + KMS, not Postgres** | Lambda reaches it without a KMS VPC endpoint (about USD 7-8 a month saved); native TTL; the EC2 can write but never read; a dump of the app database leaks only masked text. |
 | 20 Nov | **Raw ticket text in a short-lived `ticket_inbox`, deleted when masked** | The worker masks (keeps spaCy out of the API); raw text is never in `tickets`, which everything else reads. |
+| 20 Nov | **Metrics from JSON log events (CloudWatch metric filters), logs shipped by Docker's awslogs driver** | No metrics code or extra IAM in the app; one place (logs) feeds dashboards and alarms. |
+| 20 Nov | **Vault append-only is enforced by the app (condition on PutItem), not IAM** | IAM cannot require a condition expression; read, update and delete are denied by IAM. A compromised app could overwrite a value it is allowed to write, but never read one. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
 
 ---
@@ -345,7 +359,13 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | Start / stop / check EC2 + RDS | `.\scripts\demo.ps1 start`, `stop`, `status` |
 | Run locally | `docker compose up -d --build --wait` (see README) |
 
-Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `apigw` (or `cloudfront` once allowed). Delete in reverse.
+Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observability`, `ec2`, `apigw` (or `cloudfront` once allowed). Delete in reverse.
+
+| Phase 3 task | Command |
+| --- | --- |
+| Gate check | `python scripts\check_phase3.py` |
+| PII evaluation | `python scripts\eval_pii.py` (add `--record` to log to gates.csv) |
+| Reveal one value (audited) | `aws lambda invoke --function-name paynest-demo-vault-reveal --cli-binary-format raw-in-base64-out --payload file://reveal.json out.json` |
 
 ---
 
@@ -356,8 +376,8 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `apigw` (or `c
 3. CloudFront once AWS verifies the account (CloudFront, CodeBuild and Bedrock holds filed).
 4. Phase 3 in progress: 3a masking done (CI green); 3b-1 intake, worker gate, re-scan,
    sender tokens, JSON logs and `eval_pii.py` written (not deployed). Next 3b-2 (needs
-   approval): `vault.yaml` (DynamoDB table, vault KMS key, vault-reveal Lambda), EC2 role
-   additions, CloudWatch logs + metric filters + alarms, `check_phase3.py`. Then 3c:
+   approval): `vault.yaml` and `observability.yaml` written, `ec2.yaml` user data updated,
+   `check_phase3.py` (12 checks) written; deploy steps in the handoff. Then 3c:
    multilingual NER. **Do not release a new image before 3b-2:** the worker now refuses to
    start without `PII_HMAC_KEY` and `VAULT_BACKEND`.
 5. Phase 4 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and

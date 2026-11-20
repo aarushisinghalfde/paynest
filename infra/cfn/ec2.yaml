@@ -3,8 +3,9 @@ Description: >-
   Paynest server. One EC2 t4g.small (Amazon Linux 2023, arm64) in a public subnet with
   an Elastic IP. At boot it installs Docker, and a systemd service ("paynest") reads the
   secrets from SSM and Secrets Manager into memory (/run), pulls the images from ECR and
-  starts the compose stack (api, worker, mock payroll API, web on port 80). No SSH:
-  use SSM Session Manager. Needs the network, security, data, iam and rds stacks.
+  starts the compose stack (api, worker, mock payroll API, web on port 80). Container
+  logs go to CloudWatch (/paynest/<env>/app). No SSH: use SSM Session Manager.
+  Needs the network, security, data, iam, rds and observability stacks.
 
 Parameters:
   Project:
@@ -84,18 +85,57 @@ Resources:
             DeleteOnTermination: true
       Tags:
         - { Key: Name, Value: !Sub "${Project}-${Env}-server" }
+      # Changing UserData makes CloudFormation stop and start the instance (same private IP
+      # and Elastic IP). The cloud-config part makes the script run at EVERY boot, not only
+      # the first, so a change here is applied by that restart. The script is idempotent.
       UserData:
         Fn::Base64: !Sub
           - |
+            Content-Type: multipart/mixed; boundary="//"
+            MIME-Version: 1.0
+
+            --//
+            Content-Type: text/cloud-config; charset="us-ascii"
+            MIME-Version: 1.0
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="cloud-config.txt"
+
+            #cloud-config
+            cloud_final_modules:
+            - [scripts-user, always]
+
+            --//
+            Content-Type: text/x-shellscript; charset="us-ascii"
+            MIME-Version: 1.0
+            Content-Transfer-Encoding: 7bit
+            Content-Disposition: attachment; filename="userdata.txt"
+
             #!/bin/bash
-            # Runs once, at first boot. Logs: /var/log/cloud-init-output.log
+            # Runs at every boot. Logs: /var/log/cloud-init-output.log
             set -euxo pipefail
 
             # The Elastic IP is attached a few seconds after boot; wait for internet access.
             for i in $(seq 1 60); do curl -fsS --max-time 5 https://aws.amazon.com >/dev/null && break; sleep 5; done
 
+            # Docker sends every container's output to CloudWatch Logs (one stream per
+            # container). non-blocking: if CloudWatch is slow, the app never waits on logging.
+            mkdir -p /etc/docker
+            cat > /etc/docker/daemon.json.new <<'JSON'
+            {"log-driver": "awslogs",
+             "log-opts": {"awslogs-region": "${AWS::Region}", "awslogs-group": "/${Project}/${Env}/app",
+                          "tag": "{{.Name}}", "mode": "non-blocking", "max-buffer-size": "4m"}}
+            JSON
+            DOCKER_CONFIG_CHANGED=0
+            if ! cmp -s /etc/docker/daemon.json.new /etc/docker/daemon.json; then
+              mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+              DOCKER_CONFIG_CHANGED=1
+            else
+              rm -f /etc/docker/daemon.json.new
+            fi
+
             dnf install -y docker
             systemctl enable --now docker
+            if [ "$DOCKER_CONFIG_CHANGED" = 1 ]; then systemctl restart docker; fi
             mkdir -p /usr/local/lib/docker/cli-plugins
             curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64 \
               -o /usr/local/lib/docker/cli-plugins/docker-compose
@@ -207,7 +247,9 @@ Resources:
 
             systemctl daemon-reload
             systemctl enable paynest.service
-            systemctl start paynest.service || echo "paynest.service will retry until the images are in ECR"
+            # restart, not start: on later boots the service may already be up with old files.
+            systemctl restart paynest.service || echo "paynest.service will retry until the images are in ECR"
+            --//--
           - DbHost: !ImportValue
               Fn::Sub: "${Project}-${Env}-DbEndpoint"
             DbPort: !ImportValue

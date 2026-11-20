@@ -1,0 +1,321 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest PII vault. A DynamoDB table holding the raw values behind the <TYPE_n> tokens,
+  each encrypted with its own KMS key (separate from the data key) and the encryption
+  context {ticket_id, token, tenant_id}. The EC2 role may only Encrypt and PutItem; the
+  vault-reveal Lambda is the only role allowed to GetItem and Decrypt. Also stores the
+  worker's vault settings in SSM. Needs the iam stack (imports the EC2 role).
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  VaultTtlDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 365
+    Description: Days a raw value stays revealable; DynamoDB TTL then deletes it.
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # ---------------------------------------------------------------- the reveal Lambda's role
+  RevealRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: !Sub "/${Project}/"
+      Description: Paynest vault-reveal Lambda - the only reader of the PII vault
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: paynest-vault-reveal
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOneItem
+                Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !GetAtt VaultTable.Arn
+              - Sid: AuditLog
+                Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt RevealLogGroup.Arn
+
+  # ---------------------------------------------------------------- vault key
+  # Nobody gets Decrypt through IAM: the key policy does not delegate to IAM policies
+  # (no "kms:*" for the account), so even an administrator cannot decrypt without
+  # first changing this policy, which CloudTrail records.
+  VaultKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "${Project}-${Env} PII vault key (vault-reveal decrypts, app encrypts)"
+      EnableKeyRotation: true
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AdministerButNotUse
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:RotateKeyOnDemand
+            Resource: "*"
+          - Sid: AppEncryptsOnly
+            Effect: Allow
+            Principal:
+              AWS: !ImportValue
+                Fn::Sub: "${Project}-${Env}-Ec2RoleArn"
+            Action: kms:Encrypt
+            Resource: "*"
+            Condition:
+              ForAllValues:StringEquals:
+                kms:EncryptionContextKeys: [ticket_id, token, tenant_id]
+              "Null":
+                kms:EncryptionContextKeys: "false"
+          - Sid: RevealDecryptsOnly
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt RevealRole.Arn
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              ForAllValues:StringEquals:
+                kms:EncryptionContextKeys: [ticket_id, token, tenant_id]
+              "Null":
+                kms:EncryptionContextKeys: "false"
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-vault-key" }
+
+  VaultKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Project}-${Env}-vault"
+      TargetKeyId: !Ref VaultKey
+
+  # ---------------------------------------------------------------- vault table
+  # One item per value: ticket_id + token -> ciphertext. Values are already KMS-encrypted
+  # by the app, so the table keeps DynamoDB's default encryption. Retained if the stack
+  # is deleted, like the data bucket.
+  VaultTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${Project}-${Env}-pii-vault"
+      BillingMode: PAY_PER_REQUEST       # no capacity to pay for while idle
+      AttributeDefinitions:
+        - { AttributeName: ticket_id, AttributeType: S }
+        - { AttributeName: token, AttributeType: S }
+      KeySchema:
+        - { AttributeName: ticket_id, KeyType: HASH }
+        - { AttributeName: token, KeyType: RANGE }
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-pii-vault" }
+
+  # ---------------------------------------------------------------- what the EC2 may do
+  # Allow: add values. Deny (explicit, so a broader policy added later cannot override
+  # it): read, change or delete values, and decrypt with the vault key.
+  AppVaultPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Select
+        - 2
+        - !Split
+          - "/"
+          - !ImportValue
+            Fn::Sub: "${Project}-${Env}-Ec2RoleArn"
+      PolicyName: paynest-vault-write-only
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AddValues
+            Effect: Allow
+            Action: dynamodb:PutItem
+            Resource: !GetAtt VaultTable.Arn
+          - Sid: EncryptValues
+            Effect: Allow
+            Action: kms:Encrypt
+            Resource: !GetAtt VaultKey.Arn
+          - Sid: NeverReadOrChangeValues
+            Effect: Deny
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:BatchGetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:PartiQL*
+              - dynamodb:ExportTableToPointInTime
+            Resource: !GetAtt VaultTable.Arn
+          - Sid: NeverDecrypt
+            Effect: Deny
+            Action: [kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:CreateGrant]
+            Resource: !GetAtt VaultKey.Arn
+
+  # ---------------------------------------------------------------- vault-reveal Lambda
+  # Outside the VPC: reaches DynamoDB and KMS directly, so no NAT or VPC endpoint is needed.
+  # Invoked only by a person with lambda:InvokeFunction (an administrator, or the review
+  # UI in phase 10). Every call is logged (ids and kinds, never the value).
+  RevealLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Project}-${Env}-vault-reveal"
+      RetentionInDays: 90                # the audit trail of reveals
+
+  RevealFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: RevealLogGroup
+    Properties:
+      FunctionName: !Sub "${Project}-${Env}-vault-reveal"
+      Description: Reveal one PII vault value for one ticket (audited)
+      Runtime: python3.12
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt RevealRole.Arn
+      Environment:
+        Variables:
+          TABLE: !Ref VaultTable
+          KEY_ARN: !GetAtt VaultKey.Arn
+      Code:
+        # Same source as lambdas/vault_reveal/handler.py (a test keeps them identical).
+        ZipFile: |
+            import json
+            import os
+            import re
+            import time
+            import uuid
+
+            TOKEN = re.compile(r"^<[A-Z][A-Z_]*?(?:_\d+)?>$")
+            _clients = {}
+
+
+            def client(name):
+                if name not in _clients:  # created once per Lambda container, reused across calls
+                    import boto3
+
+                    _clients[name] = boto3.client(name)
+                return _clients[name]
+
+
+            def audit(**f):
+                print(json.dumps({"event": "vault_reveal", **f}))
+
+
+            def handler(event, context, ddb=None, kms=None, now=time.time):
+                ddb, kms = ddb or client("dynamodb"), kms or client("kms")
+                tid = str(event.get("ticket_id", ""))
+                token = str(event.get("token", ""))
+                who = str(event.get("requested_by", ""))[:100]
+                why = str(event.get("reason", ""))
+                rid = getattr(context, "aws_request_id", None)
+                try:
+                    uuid.UUID(tid)
+                except ValueError:
+                    return {"status": "bad_request", "error": "ticket_id must be a UUID"}
+                if not TOKEN.match(token):
+                    return {"status": "bad_request", "error": "token must look like <IBAN_1>"}
+                if not who or len(why) < 5:
+                    return {"status": "bad_request", "error": "requested_by and reason are required"}
+                kind = token.strip("<>").rsplit("_", 1)[0] if token[-2].isdigit() else token.strip("<>")
+                item = ddb.get_item(TableName=os.environ["TABLE"], ConsistentRead=True,
+                                    Key={"ticket_id": {"S": tid}, "token": {"S": token}}).get("Item")
+                # TTL deletion is lazy (can take days), so expiry is checked here too.
+                if not item or int(item["expires_at"]["N"]) < now():
+                    audit(ticket_id=tid, kind=kind, requested_by=who, result="not_found", request_id=rid)
+                    return {"status": "not_found"}
+                try:
+                    out = kms.decrypt(KeyId=os.environ["KEY_ARN"], CiphertextBlob=item["ciphertext"]["B"],
+                                      EncryptionContext={"ticket_id": tid, "token": token,
+                                                         "tenant_id": item["tenant_id"]["S"]})
+                except Exception as exc:  # noqa: BLE001 - wrong context or key: never reveal
+                    audit(ticket_id=tid, kind=kind, requested_by=who, result="denied", error=type(exc).__name__,
+                          request_id=rid)
+                    return {"status": "denied"}
+                audit(ticket_id=tid, kind=kind, requested_by=who, result="revealed", request_id=rid)
+                return {"status": "ok", "value": out["Plaintext"].decode("utf-8")}
+
+  # ---------------------------------------------------------------- worker settings
+  # The EC2 loads every parameter under /paynest/<env>/ at start, so these reach the
+  # worker without changing the server. Non-secret, so plain String parameters.
+  VaultBackendParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/VAULT_BACKEND"
+      Type: String
+      Value: dynamo
+  VaultTableParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/VAULT_TABLE"
+      Type: String
+      Value: !Ref VaultTable
+  VaultKeyParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/VAULT_KEY_ID"
+      Type: String
+      Value: !GetAtt VaultKey.Arn
+  VaultTtlParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/VAULT_TTL_DAYS"
+      Type: String
+      Value: !Ref VaultTtlDays
+  PiiNerParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/PII_NER"
+      Type: String
+      Value: required                    # the worker refuses to start without Presidio + spaCy
+
+Outputs:
+  VaultTableName:
+    Value: !Ref VaultTable
+    Export: { Name: !Sub "${Project}-${Env}-VaultTableName" }
+  VaultTableArn:
+    Value: !GetAtt VaultTable.Arn
+    Export: { Name: !Sub "${Project}-${Env}-VaultTableArn" }
+  VaultKeyArn:
+    Value: !GetAtt VaultKey.Arn
+    Export: { Name: !Sub "${Project}-${Env}-VaultKeyArn" }
+  RevealFunctionName:
+    Value: !Ref RevealFunction
+    Export: { Name: !Sub "${Project}-${Env}-RevealFunctionName" }

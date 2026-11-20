@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest observability. The CloudWatch log group the EC2's containers write to, metric
+  filters that turn the app's JSON log events into metrics (no metrics code in the app),
+  and alarms: a ticket quarantined by the PII gate, the worker masking without Presidio,
+  worker failures, and messages in the dead-letter queue. Optional email alerts.
+  Needs the iam and data stacks.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  AlarmEmail:
+    Type: String
+    Default: ""
+    Description: Optional. An address to email when an alarm fires (confirm the subscription email).
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Conditions:
+  HasEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+
+Resources:
+  # Every container (api, worker, web, mock payroll API) writes here through Docker's
+  # awslogs driver; one log stream per container. Logs hold ids, kinds and counts only.
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${Project}/${Env}/app"
+      RetentionInDays: 14
+
+  # Lets Docker on the EC2 write to that log group, nothing else.
+  Ec2WriteLogsPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Select
+        - 2
+        - !Split
+          - "/"
+          - !ImportValue
+            Fn::Sub: "${Project}-${Env}-Ec2RoleArn"
+      PolicyName: paynest-write-app-logs
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: [logs:CreateLogStream, logs:PutLogEvents]
+            Resource: !GetAtt AppLogGroup.Arn
+
+  # ---------------------------------------------------------------- metrics from log events
+  PiiBlockedFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterPattern: '{ $.event = "pii_blocked" }'
+      MetricTransformations:
+        - { MetricNamespace: !Sub "${Project}/${Env}", MetricName: PiiBlocked, MetricValue: "1",
+            DefaultValue: 0 }
+
+  TicketsMaskedFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterPattern: '{ $.event = "ticket_masked" }'
+      MetricTransformations:
+        - { MetricNamespace: !Sub "${Project}/${Env}", MetricName: TicketsMasked, MetricValue: "1",
+            DefaultValue: 0 }
+
+  MaskLatencyFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterPattern: '{ $.event = "ticket_masked" }'
+      MetricTransformations:
+        - { MetricNamespace: !Sub "${Project}/${Env}", MetricName: MaskLatencyMs, MetricValue: "$.ms",
+            Unit: Milliseconds }
+
+  NerLayerOffFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterPattern: '{ $.event = "ticket_masked" && $.ner_layer = "rules" }'
+      MetricTransformations:
+        - { MetricNamespace: !Sub "${Project}/${Env}", MetricName: MaskedWithoutNer, MetricValue: "1",
+            DefaultValue: 0 }
+
+  WorkerFailedFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AppLogGroup
+      FilterPattern: '{ $.event = "message_failed" }'
+      MetricTransformations:
+        - { MetricNamespace: !Sub "${Project}/${Env}", MetricName: WorkerFailures, MetricValue: "1",
+            DefaultValue: 0 }
+
+  # ---------------------------------------------------------------- alarms
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasEmail
+    Properties:
+      TopicName: !Sub "${Project}-${Env}-alarms"
+      KmsMasterKeyId: alias/aws/sns
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref AlarmEmail }
+
+  PiiBlockedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Project}-${Env}-pii-blocked"
+      AlarmDescription: A ticket was quarantined by the PII re-scan (status pii_blocked). Review it.
+      Namespace: !Sub "${Project}/${Env}"
+      MetricName: PiiBlocked
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasEmail, [!Ref AlarmTopic], !Ref AWS::NoValue]
+
+  NerLayerOffAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Project}-${Env}-pii-ner-off"
+      AlarmDescription: The worker masked a ticket without Presidio + spaCy (rules only).
+      Namespace: !Sub "${Project}/${Env}"
+      MetricName: MaskedWithoutNer
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasEmail, [!Ref AlarmTopic], !Ref AWS::NoValue]
+
+  WorkerFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Project}-${Env}-worker-failures"
+      AlarmDescription: The worker failed 3 or more messages in 5 minutes (they are retried, then go to the DLQ).
+      Namespace: !Sub "${Project}/${Env}"
+      MetricName: WorkerFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasEmail, [!Ref AlarmTopic], !Ref AWS::NoValue]
+
+  DlqNotEmptyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${Project}-${Env}-tickets-dlq-not-empty"
+      AlarmDescription: A ticket message failed 3 times and is in the dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !Select
+            - 5
+            - !Split
+              - ":"
+              - !ImportValue
+                Fn::Sub: "${Project}-${Env}-TicketsDlqArn"
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasEmail, [!Ref AlarmTopic], !Ref AWS::NoValue]
+
+Outputs:
+  AppLogGroupName:
+    Value: !Ref AppLogGroup
+    Export: { Name: !Sub "${Project}-${Env}-AppLogGroupName" }
