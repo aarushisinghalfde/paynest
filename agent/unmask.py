@@ -5,12 +5,14 @@ customer_view(text, reveal) replaces each mask token:
     adapter calling the audited vault-reveal Lambda under its own role; the EC2 role can
     never decrypt (phase 3), so the demo has no revealer;
   - otherwise with a neutral phrase, so a customer never sees "<NAME_1>".
-Storage, logs and the reviewer console keep the masked text.
+Citation ids ([KB-0105#title]) are dropped too: the guard and the reviewer use them, the
+customer does not need them. Storage, logs and the reviewer console keep the masked text.
 """
 
 import re
 
 TOKEN_RE = re.compile(r"<([A-Z_]+)_\d+>")
+CITE_RE = re.compile(r"\s*\[(?:[A-Za-z0-9._/-]+#[A-Za-z0-9._-]+|payroll-api:[^\]\s]+|tenant:[^\]\s]+|incident:[^\]\s]+)\]")
 NEUTRAL = {"NAME": "", "EMAIL": "your email", "PHONE": "your phone number", "IBAN": "your bank account",
            "BANK_ACCOUNT": "your bank account"}
 
@@ -26,6 +28,6 @@ def customer_view(text: str, reveal=None) -> str:
                 return value
         return NEUTRAL.get(m.group(1), "the details you shared")
 
-    out = TOKEN_RE.sub(sub, text)
+    out = CITE_RE.sub("", TOKEN_RE.sub(sub, text))
     out = re.sub(r"[ \t]+([,.!?])", r"\1", out)
     return re.sub(r"[ \t]{2,}", " ", out).strip()

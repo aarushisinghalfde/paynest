@@ -46,12 +46,13 @@ class PgAgentStore(PgTicketStore):
         with self._conn() as conn:
             row = conn.execute(
                 """SELECT id::text, tenant_id, status, coalesce(subject_masked, ''), masked_body,
-                                         ticket_ref, created_at FROM tickets WHERE id = %s""",
+                                         ticket_ref, created_at, conversation_id FROM tickets WHERE id = %s""",
                 (ticket_id,),
             ).fetchone()
         if not row:
             return None
-        keys = ("id", "tenant_id", "status", "subject", "body", "ticket_ref", "created_at")  # created_at -> dedupe
+        keys = ("id", "tenant_id", "status", "subject", "body", "ticket_ref", "created_at",  # created_at -> dedupe
+                "conversation_id")
         return dict(zip(keys, row, strict=True))
 
     def tenant(self, tenant_id: str) -> dict | None:
@@ -63,7 +64,7 @@ class PgAgentStore(PgTicketStore):
 
     def save_progress(self, ticket_id: str, **fields) -> None:
         allowed = {"agent_status", "route", "route_reason", "classification", "team", "language",
-                   "duplicate_of_ref", "jira_key", "incident_id"}
+                   "duplicate_of_ref", "jira_key", "incident_id", "conversation_id"}
         fields = {
             k: (json.dumps(v) if k == "classification" else v) for k, v in fields.items() if k in allowed
         }
@@ -72,6 +73,20 @@ class PgAgentStore(PgTicketStore):
         sets = ", ".join(f"{k} = %s" for k in fields)
         with self._conn() as conn:
             conn.execute(f"UPDATE tickets SET {sets} WHERE id = %s", (*fields.values(), ticket_id))
+
+    def conversation(self, conversation_id: str, ticket_id: str, limit: int = 4) -> list[dict]:
+        """Earlier turns of this chat (masked), oldest first: the question, its route and our last reply."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT t.id::text, coalesce(t.masked_body, ''), t.route,
+                          (SELECT body_masked FROM sent_replies s WHERE s.ticket_id = t.id
+                            ORDER BY draft_version DESC LIMIT 1)
+                   FROM tickets t
+                   WHERE t.conversation_id = %s AND t.id <> %s AND t.status = 'masked'
+                     AND t.created_at <= (SELECT created_at FROM tickets WHERE id = %s)
+                   ORDER BY t.created_at DESC LIMIT %s""",
+                (conversation_id, ticket_id, ticket_id, limit)).fetchall()
+        return [{"ticket_id": i, "text": b, "route": r, "reply": rep} for i, b, r, rep in reversed(rows)]
 
     # ---- phase 7: recent tickets, incidents, Jira ------------------------------------
     def recent_tickets(self, tenant_id, created_at, exclude_id, hours: int = 72):
@@ -220,7 +235,19 @@ class MemoryAgentStore(MemoryTicketStore):
             "body": t["masked_body"],
             "ticket_ref": t.get("ticket_ref"),
             "created_at": None,
+            "conversation_id": t.get("conversation_id"),
         }
+
+    def conversation(self, conversation_id, ticket_id, limit=4):
+        order = list(self.tickets)
+        upto = order[: order.index(ticket_id)] if ticket_id in order else order
+        turns = [
+            {"ticket_id": i, "text": self.tickets[i].get("masked_body") or "", "route": self.tickets[i].get("route"),
+             "reply": next((r["body"] for (t, _v), r in sorted(self.sent.items(), reverse=True) if t == i), None)}
+            for i in upto
+            if self.tickets[i].get("conversation_id") == conversation_id and self.tickets[i].get("status") == "masked"
+        ]
+        return turns[-limit:]
 
     def tenant(self, tenant_id):
         return self.tenants.get(tenant_id)

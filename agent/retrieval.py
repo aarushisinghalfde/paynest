@@ -115,6 +115,8 @@ class Retriever:
         n = len(self.docs)
         self.idf = {w: math.log(1 + (n - f + 0.5) / (f + 0.5)) for w, f in df.items()}
         self.k1, self.b = k1, b
+        sig = sorted(f"{c['chunk_id']}|{c.get('effective_from')}|{c.get('effective_to')}" for c in self.chunks)
+        self.version = __import__("hashlib").sha256("\n".join(sig).encode()).hexdigest()[:12]  # KB version
 
     def _bm25(self, q: list[str], i: int) -> float:
         tf, dl = Counter(self.docs[i]), len(self.docs[i]) or 1

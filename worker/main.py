@@ -120,8 +120,15 @@ def build_gate():
         chunks, rules = store.knowledge()
         retriever = Retriever(chunks, rules)
         log_event(log, "knowledge_loaded", chunks=len(chunks), rules=len(rules))
+    answer_cache = None
+    if retriever is not None and settings.REDIS_URL:
+        import redis
+
+        from agent.answer_cache import RedisAnswerCache
+
+        answer_cache = RedisAnswerCache(redis.Redis.from_url(settings.REDIS_URL, socket_timeout=2))
     deps = Deps(store, from_settings(settings), settings.PII_HMAC_KEY.encode(),
-                settings.VAULT_TTL_DAYS, classifier=classifier, retriever=retriever,
+                settings.VAULT_TTL_DAYS, classifier=classifier, retriever=retriever, answer_cache=answer_cache,
                 model=client if client.key else None, payroll_url=settings.PAYROLL_API_URL,
                 draft_rung=config().get("defaults", {}).get("draft", 1))
     graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))

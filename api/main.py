@@ -31,6 +31,7 @@ class TicketIn(BaseModel):
     sender_name: str | None = Field(default=None, max_length=200)
     sender_email: str | None = Field(default=None, max_length=320)
     sender_phone: str | None = Field(default=None, max_length=40)
+    conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{8,64}$")
 
     @field_validator("tenant_id")
     @classmethod
@@ -109,6 +110,8 @@ def create_ticket(
     if not created:
         response.status_code = 200
         return {"ticket_id": ticket_id, "status": "duplicate_request"}
+    if ticket.conversation_id:  # before queueing, so the agent sees it
+        store.save_progress(ticket_id, conversation_id=ticket.conversation_id)
     try:
         get_queue()(json.dumps({"ticket_id": ticket_id}))
     except Exception as exc:  # noqa: BLE001 - undo, so no ticket waits forever unqueued

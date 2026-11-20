@@ -36,6 +36,8 @@ class TicketState(TypedDict, total=False):
     queue: str | None
     injection_rules: list[str]
     talk: str | None  # greeting | thanks | vague (agent/conversation.py)
+    context: str | None  # the earlier message this one follows up (same conversation)
+    history: list[dict]  # last turns of this conversation, masked: [{text, reply}]
     duplicate_reason: str | None
     incident_id: str | None
     incident_size: int
@@ -43,7 +45,7 @@ class TicketState(TypedDict, total=False):
     waiting_review: bool
     draft: str | None
     draft_version: int
-    draft_mode: str  # model | fallback | template
+    draft_mode: str  # cache | model | fallback | template
     citations: list[str]
     sources: dict  # {"as_of", "hits", "facts"}: what the draft was allowed to use (phase 8)
     guard: dict

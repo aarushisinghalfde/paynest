@@ -52,7 +52,7 @@ def http(method, url, body=None, headers=None):
 def run_case(base, tenant, text):
     code, out = http("POST", f"{base}/api/tickets", {"tenant_id": tenant, "body": text, "channel": "chat"},
                      {"Idempotency-Key": uuid.uuid4().hex})
-    if code != 200 or "ticket_id" not in out:
+    if code not in (200, 201, 202) or "ticket_id" not in out:
         raise AssertionError(f"POST returned {code}")
     tid = out["ticket_id"]
     deadline = time.time() + 60

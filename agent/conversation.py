@@ -1,6 +1,7 @@
 """Chat behaviour that is not a support ticket: greetings, thanks, and messages too vague to act on.
 
 kind(text) -> "greeting" | "thanks" | "vague" | None
+is_howto(text) -> True for a how-to-use question with no sign of a problem
   greeting / thanks  a short message that is only that ("hi", "thanks!", "नमस्ते", "مرحبا")
   vague              three words or fewer with no topic we can act on ("payment delayed")
 The router turns these into the chat and ask routes: a conversational reply or one
@@ -33,3 +34,15 @@ def kind(text: str) -> str | None:
     if len(t.split()) <= 3 and not TOPIC_HINT.search(t):
         return "vague"
     return None
+
+
+HOWTO = re.compile(r"\b(how (do|can|to|should) (i|we|you)?|how to|where (can|do) (i|we)|steps to|kaise|kahan)\b"
+                   r"|कैसे|कहाँ|كيف|أين", re.I)
+PROBLEM = re.compile(
+    r"\b(error|fail(ed|ing|s)?|reject(ed|ion)?|not (credited|working|showing|generated|received|paid|loading)|wrong"
+    r"|mismatch|stuck|missing|unable|can'?t|cannot|issue|problem|urgent|nahi|nahin)\b"
+    r"|नहीं|गलत|त्रुटि|لا أستطيع|لم يتم|لم تصل|خطأ|رفض|مشكلة", re.I)
+
+
+def is_howto(text: str) -> bool:
+    return bool(HOWTO.search(text or "")) and not PROBLEM.search(text or "")

@@ -184,6 +184,8 @@ def test_customer_view_never_shows_tokens():
     assert customer_view("Hi <NAME_1>, we emailed <EMAIL_1>.") == "Hi, we emailed your email."
     assert customer_view("Hi <NAME_1>", reveal=lambda t: "Kavya") == "Hi Kavya"
     assert customer_view("PAN <PAN_1> noted") == "PAN the details you shared noted"
+    assert customer_view("See the guide (KB-0105) [KB-0105#title]. Run is done [payroll-api:PR-1].") == (
+        "See the guide (KB-0105). Run is done.")
 
 
 def test_state_with_sources_is_json_serialisable():
@@ -235,3 +237,51 @@ def test_arabic_and_hindi_questions_find_the_english_guide_and_answer_in_their_l
     g = guard.check(d["reply"], ticket_text=text, region="UAE", language=lang, hits=hits, facts=[],
                     as_of=date(2026, 9, 1), ref="PN-1")
     assert g["ok"], g
+
+
+def _chat(store, deps, text, cid="conv-1234"):
+    tid = store.create("C-1001", "chat", text, None)
+    store.save_progress(tid, conversation_id=cid)
+    return tid, run(tid, deps, MemoryCheckpoints())
+
+
+PAYSLIP = {"chunk_id": "KB-0105#title", "kb_id": "KB-0105", "source_kind": "kb_title", "region": "ALL",
+           "topic": "payslip", "title": "Downloading payslips in bulk", "content": "KB-0105: Downloading payslips in bulk"}
+
+
+def test_howto_flow_answers_from_rag_then_from_the_cache():
+    from agent.answer_cache import MemoryAnswerCache
+
+    store, cache = MemoryAgentStore(TENANTS), MemoryAnswerCache()
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES), answer_cache=cache)
+    _, first = _chat(store, deps, "How do I download payslips for all employees?")
+    assert first["team"] == "How-To" and first["draft_mode"] == "fallback" and first["sent"]
+    t2, second = _chat(store, deps, "how can I download the payslips of all my employees", cid="conv-other")
+    assert second["draft_mode"] == "cache" and second["guard"]["ok"] and second["sent"]
+    assert "KB-0105" in store.replies(t2)[0]["body"] and "How-To cache" in store.tickets[t2]["route_reason"]
+    _, other = _chat(store, deps, "How do I add a new employee?", cid="conv-3")
+    assert other["draft_mode"] != "cache"  # a different question is not served from the cache
+
+
+def test_follow_up_is_read_with_the_earlier_turn():
+    store = MemoryAgentStore(TENANTS)
+    deps = _deps(store)
+    _, first = _chat(store, deps, "payment delayed")
+    assert first["route"] == "ask"
+    _, second = _chat(store, deps, "salary for September, 12 employees, bank shows pending")
+    assert second["context"] == store.tickets[first["ticket_id"]]["masked_body"]
+    assert second["route"] != "ask" and second["history"][0]["reply"]
+
+
+def test_how_to_reply_never_quotes_a_statutory_figure():
+    store = MemoryAgentStore(TENANTS)
+    _, st = _chat(store, _deps(store), "How do I see the PF wage ceiling for September 2026?")
+    assert st["team"] == "How-To" and st["route"] == "reply"
+    assert "25,000" not in (st.get("draft") or "") and not any(f["tool"] == "get_rate" for f in st["sources"]["facts"])
+
+
+def test_is_howto():
+    from agent.conversation import is_howto
+
+    assert is_howto("How do I download payslips?") and is_howto("كيف يمكنني تحميل كشوف الرواتب")
+    assert not is_howto("How do I fix the rejected WPS file?") and not is_howto("Salary not credited")

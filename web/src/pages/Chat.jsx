@@ -4,7 +4,9 @@ import ApiStatus from '../ApiStatus.jsx'
 // Customer chat. Each message is posted once with its own Idempotency-Key (a double click or
 // a network retry cannot create two tickets), then the page polls the ticket every 2 s until
 // it has a final answer. API Gateway HTTP APIs have no WebSockets, so polling it is.
-// Follow-ups are new messages in the same conversation; the agent links repeats itself.
+// Every message carries this page's conversation_id, so a follow-up ("and for contractors?")
+// is answered with the earlier turns in mind. How-To answers come from the answer cache first,
+// then from the approved sources (RAG).
 const POLL_MS = 2000
 const FINAL = new Set(['replied', 'taken_over', 'failed', 'pii_blocked'])
 
@@ -43,31 +45,30 @@ function Bubble({ who, children, sub }) {
 export default function Chat() {
   const [tenant, setTenant] = useState('C-1001')
   const [text, setText] = useState('')
-  const [messages, setMessages] = useState([])     // {text (as typed), body (as sent), ticketId}
+  const [messages, setMessages] = useState([])     // {text, ticketId}
   const [tickets, setTickets] = useState({})       // ticketId -> ticket view
   const [error, setError] = useState('')
   const sending = useRef(false)
+  // One conversation per page visit: the agent reads follow-ups together with earlier turns.
+  const [conversationId] = useState(() => crypto.randomUUID())
   const bottom = useRef(null)
 
   async function send(e, preset) {
     e?.preventDefault()
     const typed = (preset ?? text).trim()
     if (!typed || sending.current) return
-    // After a clarifying question, send the answer together with the first message,
-    // so the agent reads the whole request.
-    const last = messages[messages.length - 1]
-    const body = last && tickets[last.ticketId]?.route === 'ask' ? `${last.body}\n${typed}` : typed
+    const body = typed
     sending.current = true
     setError('')
     try {
       const r = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ tenant_id: tenant, body, channel: 'chat' }),
+        body: JSON.stringify({ tenant_id: tenant, body, channel: 'chat', conversation_id: conversationId }),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const { ticket_id } = await r.json()
-      setMessages((m) => [...m, { text: typed, body, ticketId: ticket_id }])
+      setMessages((m) => [...m, { text: typed, ticketId: ticket_id }])
       setTickets((t) => ({ ...t, [ticket_id]: { status: 'received', replies: [] } }))
       setText('')
     } catch (err) {
