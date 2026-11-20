@@ -149,16 +149,16 @@ def check_public_ticket():
     seed = {t["id"]: t for t in json.loads((FIXTURES / "pii_seeded.json").read_text(encoding="utf-8"))}
     url = stack_output("apigw", "Url") + "/api/tickets"
     state["start_ms"] = int(time.time() * 1000) - 5000
-    state["tickets"] = []
+    submitted = []
     for sid in ("SEED-001", "SEED-002"):
         t = seed[sid]
         payload = {"tenant_id": TENANT, "body": t["body"], "sender_name": t["sender_name"],
                    "sender_email": t["sender_email"], "sender_phone": t["sender_phone"]}
         code, body = http("POST", url, payload)
         assert code == 202, f"POST /api/tickets returned HTTP {code}"
-        state["tickets"].append({"id": body["ticket_id"], "seed": t})
+        submitted.append({"id": body["ticket_id"], "seed": t})
     deadline = time.time() + 90
-    pending = list(state["tickets"])
+    pending = list(submitted)
     while pending and time.time() < deadline:
         time.sleep(3)
         for t in list(pending):
@@ -167,12 +167,13 @@ def check_public_ticket():
                 t["row"] = got
                 pending.remove(t)
     assert not pending, f"{len(pending)} ticket(s) still not masked after 90 s (worker down?)"
-    for t in state["tickets"]:
+    for t in submitted:
         row = t["row"]
         assert row["status"] == "masked", f"status {row['status']}, reasons {row['pii_block_reasons']}"
         kinds = [k for k in t["seed"]["raw_values"] if leaked(k, t["row"]["masked_body"])]
         assert not kinds, f"{len(kinds)} raw value(s) visible in masked_body"
-    counts = state["tickets"][0]["row"]["pii_counts"]
+    state["tickets"] = submitted          # later checks run only once both tickets are masked
+    counts = submitted[0]["row"]["pii_counts"]
     return f"2 tickets masked; first: {counts}"
 
 
