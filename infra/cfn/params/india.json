@@ -5,6 +5,7 @@
     "Deployable": "false",
     "VpcCidr": "10.30.0.0/16",
     "CloudFrontPrefixListId": "auto:cloudfront",
-    "OriginDomain": "auto:ec2-dns"
+    "OriginDomain": "auto:ec2-dns",
+    "Ec2PrivateIp": "auto:ec2-private-ip"
   }
 }

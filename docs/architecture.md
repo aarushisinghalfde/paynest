@@ -1,7 +1,8 @@
 # Paynest architecture
 
-Status as of **20 Nov 2026**: phase 0 and phase 1 done; phase 2 (AWS foundation) in
-progress. This file describes what is built, what is planned, and why. Diagrams are
+Status as of **20 Nov 2026, evening**: phases 0 and 1 done; phase 2 (AWS foundation) is
+**live in Sydney** at https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com
+(the phase 2 gate script is still to come). This file describes what is built, what is planned, and why. Diagrams are
 Mermaid and render on GitHub.
 
 Paynest (Payce Support Assist) is a support-ticket assistant for a payroll provider with
@@ -63,20 +64,22 @@ queue modes.
 
 ---
 
-## 3. AWS architecture (target for phase 2)
+## 3. AWS architecture (live in Sydney)
 
 ```mermaid
 flowchart TB
-  U["Browser"] -->|HTTPS| CF["CloudFront<br/>(written, not deployed)"]
+  U["Browser"] -->|HTTPS| AG["API Gateway HTTP API<br/>(live)"]
+  U -.->|"later, after account verification"| CF["CloudFront<br/>(blocked for now)"]
   subgraph VPC["VPC 10.20.0.0/16 (no NAT)"]
     subgraph PUB["Public subnets x2"]
-      EC2["EC2 t4g.small + Elastic IP<br/>web, api, worker, mock payroll<br/>(written, not deployed)"]
+      EC2["EC2 t4g.small + Elastic IP<br/>web, api, worker, mock payroll<br/>(live)"]
     end
     subgraph PRIV["Private subnets x2 (no internet route)"]
-      RDS["RDS PostgreSQL 17.11<br/>(written, not deployed)"]
+      RDS["RDS PostgreSQL 17.11<br/>(live)"]
     end
   end
-  CF -->|"HTTP :80, CloudFront IPs only"| EC2
+  AG -->|"VPC Link, private, :80"| EC2
+  CF -.->|"HTTP :80, CloudFront IPs only"| EC2
   EC2 -->|":5432, EC2 SG only"| RDS
   EC2 --> SQS["SQS tickets-in + DLQ"]
   EC2 --> SSM["SSM secrets"]
@@ -97,9 +100,10 @@ flowchart TB
 | 2 | `security` | EC2 security group (port 80 from the CloudFront prefix list only, no SSH); RDS security group (5432 from the EC2 group only, no egress); KMS key `alias/paynest-demo` with rotation. | Deployed |
 | 3 | `data` | S3 bucket `paynest-demo-data-<account>` (KMS, versioned, private, HTTPS-only, retained on delete); SQS `paynest-demo-tickets-in` + DLQ (KMS, 3 tries); ECR `paynest-demo/app`, `paynest-demo/web` (scan on push, keep 5). | Deployed |
 | 4 | `iam` | EC2 role + instance profile (least privilege); GitHub OIDC provider; GitHub deploy role (push to ECR only). | Deployed |
-| 5 | `rds` | PostgreSQL 17.11 `db.t4g.micro`, private, KMS, password managed by AWS in Secrets Manager, 1-day backups, final snapshot on delete. | Written |
-| 6 | `ec2` | t4g.small (AL2023 arm64), Elastic IP, encrypted disk, IMDSv2; boot script installs Docker and a `paynest` systemd service; grants read access to the DB secret. | Written |
-| 7 | `cloudfront` | Distribution `https://<id>.cloudfront.net` in front of the EC2: HTTPS for viewers, HTTP to the origin (EC2 DNS looked up automatically), no caching except hashed `/assets/*`, WebSockets pass through. | Written |
+| 5 | `rds` | PostgreSQL 17.11 `db.t4g.micro`, private, KMS, password managed by AWS in Secrets Manager, 1-day backups, final snapshot on delete. | Deployed |
+| 6 | `ec2` | t4g.small (AL2023 arm64), Elastic IP, encrypted disk, IMDSv2; boot script installs Docker and a `paynest` systemd service; grants read access to the DB secret. | Deployed |
+| 7a | `apigw` | Public HTTPS URL via an API Gateway HTTP API; a VPC Link (private subnets) plus Cloud Map reaches the EC2 private IP on port 80; rate limit 20 req/s. Limits: 30 s per request, no WebSockets. | **Deployed** (live URL) |
+| 7b | `cloudfront` | Distribution `https://<id>.cloudfront.net` in front of the EC2 (WebSockets, edge caching of `/assets/*`). | Written; **blocked** until AWS verifies the account |
 
 Every template has a `Rules` check: `params/india.json` and `params/uae.json`
 (`Deployable=false`) can be validated but never deployed. Stacks share values through
@@ -119,19 +123,19 @@ another still uses; delete newest first.
 
 ---
 
-## 4. Request flow (once EC2 and CloudFront are live)
+## 4. Request flow (live)
 
 ```mermaid
 sequenceDiagram
   participant B as Browser
-  participant CF as CloudFront
+  participant CF as API Gateway
   participant W as nginx (web)
   participant A as API
   participant DB as RDS
   participant Q as SQS
   participant K as Worker
   B->>CF: HTTPS request
-  CF->>W: HTTP :80
+  CF->>W: HTTP :80 via VPC Link
   W->>A: /api/... (proxy)
   A->>DB: save ticket
   A->>Q: send ticket ID only
@@ -215,7 +219,8 @@ flowchart LR
 | RDS `db.t4g.micro` + 20 GB | about USD 0.70 per day | storage only (about USD 0.09 per day) |
 | EC2 `t4g.small` + 20 GB disk | about USD 0.57 per day | disk only (about USD 0.06 per day) |
 | Elastic IP | about USD 0.12 per day | same (charged while stopped) |
-| CloudFront, GitHub Actions | free at demo volume | - |
+| API Gateway (about USD 1 per million requests), VPC Link, Cloud Map | cents per month | same |
+| GitHub Actions | free (public repo) | - |
 
 EC2 and RDS are started only for work sessions and demos (start/stop scripts planned).
 
@@ -232,6 +237,7 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **No SSH**, SSM Session Manager only | No open admin port, no keys to manage. |
 | 20 Nov | **Files -> S3 -> loader -> Postgres; SQS carries IDs only** | Replayable, auditable, PII contained. |
 | 20 Nov | **Images built by GitHub Actions on native ARM, on version tags** | CodeBuild was blocked by a new-account limit; GitHub ARM runners are native and free for public repos. |
+| 20 Nov | **API Gateway (HTTP API + VPC Link) as the public entry** | CloudFront is held until AWS verifies the new account; API Gateway gives an AWS HTTPS URL today, keeps the EC2 private, adds rate limiting. Switch to CloudFront later for WebSockets. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
 
 ---
@@ -247,17 +253,18 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | Delete a stack (asks for its name) | `.\scripts\cfn.ps1 delete <stack>` |
 | Store secrets from `.env` in SSM | `.\scripts\put_secrets.ps1` |
 | Release images | `git tag v0.x.y` then `git push origin v0.x.y` |
+| Start / stop / check EC2 + RDS | `.\scripts\demo.ps1 start`, `stop`, `status` |
 | Run locally | `docker compose up -d --build --wait` (see README) |
 
-Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `cloudfront`. Delete in reverse.
+Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `apigw` (or `cloudfront` once allowed). Delete in reverse.
 
 ---
 
 ## 11. What is next
 
-1. First release `v0.1.0` (images into ECR).
-2. Deploy `rds`, then `ec2` (same session; hourly billing starts).
-3. Deploy `cloudfront`; write start/stop and deploy scripts; `scripts/check_phase2.py` gate.
+1. Done: release `v0.1.0`, `rds`, `ec2`, `apigw` (public URL).
+2. `scripts/check_phase2.py` gate; `deploy.ps1` (pinned image versions via SSM).
+3. CloudFront once AWS verifies the account (CloudFront, CodeBuild and Bedrock holds filed).
 4. Phase 3 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
    AgentCore (phase 5).
 

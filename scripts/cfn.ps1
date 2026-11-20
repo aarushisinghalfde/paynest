@@ -9,7 +9,7 @@
     .\scripts\cfn.ps1 events network       # show recent failures, if a deploy failed
     .\scripts\cfn.ps1 delete network       # delete the stack (asks you to type its name)
 
-  Stacks, in deploy order: network, security, data, iam, rds, ec2, cloudfront.
+  Stacks, in deploy order: network, security, data, iam, rds, ec2, then apigw (now) or cloudfront (after AWS verifies the account).
 
   Stack "network" uses infra\cfn\network.yaml and is called paynest-demo-network.
   -Target india or uae uses the placeholder params; the templates refuse to deploy them.
@@ -97,6 +97,15 @@ function Resolve-ParamValue {
     if (-not $dns -or $dns -eq "None") { throw "No Paynest EC2 found in $region. Deploy the ec2 stack first." }
     Write-Host "EC2 public DNS in ${region}: $dns" -ForegroundColor DarkGray
     return $dns
+  }
+  if ($Value -eq "auto:ec2-private-ip") {
+    # Private IP of the Paynest EC2 (unchanged across stop/start), used by the API Gateway VPC Link.
+    $ip = Get-Text @("ec2", "describe-instances", "--region", $region,
+      "--filters", "Name=tag:Name,Values=$Project-$Target-server", "Name=instance-state-name,Values=running,stopped",
+      "--query", "Reservations[0].Instances[0].PrivateIpAddress", "--output", "text")
+    if (-not $ip -or $ip -eq "None") { throw "No Paynest EC2 found in $region. Deploy the ec2 stack first." }
+    Write-Host "EC2 private IP in ${region}: $ip" -ForegroundColor DarkGray
+    return $ip
   }
   return $Value
 }

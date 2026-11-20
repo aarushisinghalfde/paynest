@@ -63,7 +63,11 @@ Resources:
               - Sid: ReadOwnSecrets
                 Effect: Allow
                 Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath]
-                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Project}/${Env}/*"
+                Resource:
+                  # GetParametersByPath is authorised against the path itself...
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Project}/${Env}"
+                  # ...GetParameter(s) against each parameter under it.
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Project}/${Env}/*"
               - Sid: UseDataKey
                 Effect: Allow
                 Action: [kms:Decrypt, kms:GenerateDataKey]

@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Paynest public address (used while CloudFront awaits account verification). An API
+  Gateway HTTP API with an AWS-managed HTTPS URL forwards every request privately, through
+  a VPC Link, to the EC2's private IP on port 80 (nginx serves the dashboard and proxies
+  /api/). The EC2 stays closed to the internet. Limits: 30 s per request, no WebSockets.
+  Needs the network, security and ec2 stacks.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  Ec2PrivateIp:
+    Type: String
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}$'
+    Description: >-
+      Private IP of the Paynest EC2 (it stays the same across stop/start). cfn.ps1 looks
+      it up automatically ("auto:ec2-private-ip" in the params file).
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # -------------------------------------------------------- private path into the VPC
+  VpcLinkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Paynest API Gateway VPC Link - talks to the EC2 on port 80 only
+      VpcId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-VpcId"
+      SecurityGroupEgress:
+        - Description: HTTP to the VPC (the EC2)
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !ImportValue
+            Fn::Sub: "${Project}-${Env}-VpcCidr"
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-vpclink-sg" }
+
+  # Opens the EC2's port 80 to the VPC Link only (alongside the existing CloudFront rule).
+  Ec2IngressFromVpcLink:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-Ec2SecurityGroupId"
+      Description: HTTP from the API Gateway VPC Link
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref VpcLinkSecurityGroup
+
+  VpcLink:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: !Sub "${Project}-${Env}-vpclink"
+      SubnetIds: !Split
+        - ","
+        - !ImportValue
+          Fn::Sub: "${Project}-${Env}-PrivateSubnetIds"
+      SecurityGroupIds: [!Ref VpcLinkSecurityGroup]
+
+  # -------------------------------------------------------- where the EC2 is (Cloud Map)
+  Namespace:
+    Type: AWS::ServiceDiscovery::HttpNamespace
+    Properties:
+      Name: !Sub "${Project}-${Env}"
+      Description: Paynest service registry for the API Gateway VPC Link
+
+  WebService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: web
+      NamespaceId: !Ref Namespace
+      Type: HTTP
+
+  WebInstance:
+    Type: AWS::ServiceDiscovery::Instance
+    Properties:
+      ServiceId: !Ref WebService
+      InstanceId: !Sub "${Project}-${Env}-server"
+      InstanceAttributes:
+        AWS_INSTANCE_IPV4: !Ref Ec2PrivateIp
+        AWS_INSTANCE_PORT: "80"
+
+  # -------------------------------------------------------- the public HTTPS API
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${Project}-${Env}-api"
+      ProtocolType: HTTP
+      Description: Public HTTPS entry for the Paynest dashboard and API
+
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLink
+      IntegrationUri: !GetAtt WebService.Arn
+      PayloadFormatVersion: "1.0"
+      TimeoutInMillis: 30000
+
+  # One catch-all route: every path and method goes to nginx on the EC2.
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: $default
+      Target: !Sub "integrations/${Integration}"
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 20         # requests per second: protects the demo from floods
+        ThrottlingBurstLimit: 50
+
+Outputs:
+  Url:
+    Description: The public HTTPS address of the dashboard
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export: { Name: !Sub "${Project}-${Env}-ApiUrl" }
