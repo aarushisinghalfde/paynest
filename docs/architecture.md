@@ -194,8 +194,11 @@ flowchart LR
   PAN, IFSC, UAN, phones, emails and unknown long numbers. They give the same result with
   or without Presidio, and the 60-ticket leak test (English, Hinglish, Hindi, Arabic) must
   show 0 raw values.
-- **Presidio adds mid-sentence names** through spaCy (`en_core_web_sm`, English and
-  Hinglish). 12 extra seeded tickets test this. Hindi and Arabic names rely on the rules.
+- **Mid-sentence names** are found by a capitalised-name rule (two or more capitalised words
+  that are not common or payroll words, e.g. "Ananya Iyer") and by spaCy (`en_core_web_sm`)
+  through Presidio. The first CI run showed spaCy alone missed 3 of 12 Indian names and
+  tagged "Email" as a person, so the rule is part of the gate; 12 extra seeded tickets
+  test it. Hindi and Arabic names rely on the script-specific rules.
 - **Same value, same token** within a ticket (`<NAME_1>` everywhere), so agents can still
   follow the conversation.
 - `PII_NER=auto|required|off` controls the Presidio layer (`required` in the worker image).

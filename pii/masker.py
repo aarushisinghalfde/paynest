@@ -66,6 +66,28 @@ NOT_NAMES = {
     "है", "हूं", "हूँ", "का", "की", "के", "को", "भुगतान",
 }
 
+# Two or more capitalised Latin words in a row ("Ananya Iyer", "Rahul Singhania") are treated
+# as a name once common words are trimmed from either end. Catches names mid-sentence that
+# have no "my name is" or sign-off, without a list of known names.
+CAP_RUN_RE = re.compile(r"(?<![A-Za-z])[A-Z][a-z]{2,}(?:[ \-][A-Z][a-z]{2,})+(?![A-Za-z])")
+COMMON_CAPS = {
+    # sentence starters and function words (English, Hinglish)
+    "yesterday", "today", "tomorrow", "both", "our", "we", "can", "could", "please", "the", "this",
+    "that", "these", "hi", "hello", "dear", "is", "are", "was", "and", "but", "also", "kindly", "why",
+    "when", "what", "how", "who", "kal", "aaj", "maine", "humare", "hamare", "mera", "meri", "mere",
+    "bhai", "namaste", "shukriya", "dhanyavaad", "regards", "thanks", "thank", "sincerely", "best",
+    # payroll and product terms
+    "payce", "support", "team", "payroll", "finance", "salary", "bonus", "payslip", "form", "employee",
+    "staff", "manager", "leave", "encashment", "gratuity", "provident", "fund", "income", "tax",
+    "professional", "account", "bank", "transfer", "email", "mail", "call", "phone", "mobile",
+    "reference", "ticket", "statement", "letter", "offer", "joining", "reimbursement", "arrears",
+    # places and calendar
+    "india", "dubai", "abu", "dhabi", "sharjah", "uae", "emirates", "mumbai", "delhi", "bengaluru",
+    "bangalore", "chennai", "pune", "hyderabad", "january", "february", "march", "april", "may",
+    "june", "july", "august", "september", "october", "november", "december", "monday", "tuesday",
+    "wednesday", "thursday", "friday", "saturday", "sunday",
+}
+
 PRIORITY = {"EMAIL": 0, "IBAN": 1, "EMIRATES_ID": 2, "AADHAAR": 3, "UAN": 3, "PAN": 4, "IFSC": 4,
             "PHONE": 5, "ACCOUNT": 6, "NAME": 7}
 
@@ -151,6 +173,14 @@ def _name_variants(sender_name: str | None, text: str,
             words = [w for w in m.group(1).split() if w not in NOT_NAMES]
             if words:
                 people.append(" ".join(words))
+    for m in CAP_RUN_RE.finditer(text):
+        words = re.split(r"[ \-]", m.group())
+        while words and words[0].lower() in COMMON_CAPS:
+            words.pop(0)
+        while words and words[-1].lower() in COMMON_CAPS:
+            words.pop()
+        if len(words) >= 2 and not any(w.lower() in COMMON_CAPS for w in words):
+            people.append(" ".join(words))
     variants: list[tuple[str, str]] = []
     seen: set[str] = set()
     for person in people:

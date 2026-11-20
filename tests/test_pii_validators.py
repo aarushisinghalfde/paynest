@@ -87,3 +87,18 @@ def test_aadhaar_after_uan_keeps_its_label():
     a = base + verhoeff_check_digit(base)
     r = mask_ticket(f"UAN 100123456789. Aadhaar {a}.")
     assert r.text == "UAN <UAN_1>. Aadhaar <AADHAAR_1>."
+
+
+def test_capitalised_name_rule_on_unseen_names():
+    # names that are not in the seed generator's lists
+    for text, name in [("We onboarded Zubair Kapadia yesterday.", "Zubair"),
+                       ("Tenzin Dorje's payslip is blank.", "Tenzin"),
+                       ("Kal Harpreet Dhillon ka bonus nahi aaya.", "Harpreet")]:
+        assert name not in mask_ticket(text).text, text
+
+
+def test_capitalised_phrases_that_are_not_names_stay():
+    for text in ["Dear Payce Support Team, the October Payroll run failed.",
+                 "Our Abu Dhabi office uses WPS. Emirates ID is attached.",
+                 "Form 16 for Income Tax is missing since Monday."]:
+        assert "<NAME_" not in mask_ticket(text).text, text

@@ -29,6 +29,8 @@ NOT_PEOPLE = {
     "team", "sir", "madam", "regards", "thanks", "please", "kindly", "october", "november", "ji",
     "shukriya", "dhanyavaad", "kal", "maine", "humare", "mera", "meri", "arrears", "ctc", "bonus",
 }
+NOT_PEOPLE |= {"email", "mail", "call", "phone", "mobile", "account", "bank", "again", "other",
+               "reference", "ticket", "leave", "employee", "manager", "statement", "letter", "contact"}
 
 _analyzer = None
 _tried = False

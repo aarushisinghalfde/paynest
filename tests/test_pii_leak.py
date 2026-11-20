@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pii import mask_ticket, presidio_layer
+from pii import mask_ticket
 from pii.normalize import normalize_digits
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -40,9 +40,8 @@ def test_no_raw_value_leaks(t):
     assert not leaks, f"{t['id']} leaked {leaks}\n{masked}"
 
 
-@pytest.mark.skipif(not presidio_layer.available(), reason="needs the Presidio layer")
 @pytest.mark.parametrize("t", SEED_NER, ids=[t["id"] for t in SEED_NER])
 def test_no_mid_sentence_name_leaks(t):
-    """Names with no 'my name is' or sign-off: only spaCy NER can find these."""
+    """Names with no 'my name is' or sign-off: found by the capitalised-name rule and spaCy."""
     leaks, masked = _leaks(t)
     assert not leaks, f"{t['id']} leaked {leaks}\n{masked}"

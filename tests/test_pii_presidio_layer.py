@@ -45,9 +45,9 @@ def test_ner_name_mid_sentence_is_masked_everywhere(fake):
 
 
 def test_ner_payroll_terms_and_acronyms_are_not_names(fake):
-    fake(["TDS", "Payslip", "Form"])
-    text = "Payslip shows TDS twice and Form 16 is missing."
-    assert mask_ticket(text).text == text
+    fake(["TDS", "Payslip", "Form", "Email"])
+    text = "Payslip shows TDS twice and Form 16 is missing. Email a@b.com"
+    assert mask_ticket(text).text == text.replace("a@b.com", "<EMAIL_1>")
 
 
 def test_same_tokens_with_and_without_presidio(fake):
