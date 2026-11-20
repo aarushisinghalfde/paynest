@@ -174,6 +174,32 @@ flowchart LR
   `raw/`.
 - **Demo traffic is replayed through the API**, so the demo exercises the real path.
 
+### PII gate (phase 3, `pii/`)
+
+```mermaid
+flowchart LR
+  subgraph P["Presidio pipeline"]
+    R["PaynestRecognizer<br/>regex + checksums"]
+    S["spaCy en_core_web_sm<br/>PERSON"]
+  end
+  T["Ticket body"] --> N["Normalise digits<br/>٧ / ७ -> 7"]
+  N --> P
+  P --> NM["Name rules<br/>sender, intros, sign-offs"]
+  NM --> TK["Tokeniser<br/>value -> IBAN_1"]
+  TK --> M["Masked ticket -> worker, agents"]
+  TK --> V["pii_vault (KMS, expires)<br/>planned 3b"]
+```
+
+- **Our recognisers are the gate.** Aadhaar (Verhoeff), Emirates ID (Luhn), IBAN (mod-97),
+  PAN, IFSC, UAN, phones, emails and unknown long numbers. They give the same result with
+  or without Presidio, and the 60-ticket leak test (English, Hinglish, Hindi, Arabic) must
+  show 0 raw values.
+- **Presidio adds mid-sentence names** through spaCy (`en_core_web_sm`, English and
+  Hinglish). 12 extra seeded tickets test this. Hindi and Arabic names rely on the rules.
+- **Same value, same token** within a ticket (`<NAME_1>` everywhere), so agents can still
+  follow the conversation.
+- `PII_NER=auto|required|off` controls the Presidio layer (`required` in the worker image).
+
 ---
 
 ## 6. Release flow (images)
@@ -238,6 +264,7 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **Files -> S3 -> loader -> Postgres; SQS carries IDs only** | Replayable, auditable, PII contained. |
 | 20 Nov | **Images built by GitHub Actions on native ARM, on version tags** | CodeBuild was blocked by a new-account limit; GitHub ARM runners are native and free for public repos. |
 | 20 Nov | **API Gateway (HTTP API + VPC Link) as the public entry** | CloudFront is held until AWS verifies the new account; API Gateway gives an AWS HTTPS URL today, keeps the EC2 private, adds rate limiting. Switch to CloudFront later for WebSockets. |
+| 20 Nov | **PII: own recognisers as the gate, Presidio + spaCy `en_core_web_sm` for names** | Checksum-validated rules are deterministic and cover IDs Presidio lacks (Emirates ID, UAN, native digits); spaCy finds mid-sentence English and Hinglish names. The small model keeps RAM low on the t4g.small. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
 
 ---
@@ -263,9 +290,11 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `ec2`, `apigw` (or `c
 ## 11. What is next
 
 1. Done: release `v0.1.0`, `rds`, `ec2`, `apigw` (public URL).
-2. `scripts/check_phase2.py` gate; `deploy.ps1` (pinned image versions via SSM).
+2. Done: `scripts/check_phase2.py` gate (11/11). Next: `deploy.ps1` (pinned image versions via SSM).
 3. CloudFront once AWS verifies the account (CloudFront, CodeBuild and Bedrock holds filed).
-4. Phase 3 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
+4. Phase 3 in progress: 3a masking code and leak tests done; 3b HMAC sender tokens,
+   `pii_vault`, vault KMS key and the vault-reveal Lambda.
+5. Phase 4 onwards: data loader (S3 -> masking -> Postgres), then the LangGraph agent and
    AgentCore (phase 5).
 
 Open items: free disk space on the laptop; Bedrock support case; `OPENROUTER_API_KEY` into

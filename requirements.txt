@@ -1,4 +1,4 @@
-# Phase 1. Later phases add LangGraph, Presidio, embeddings and evaluation tools.
+# Phase 1 base; phase 3 adds Presidio. Later phases add LangGraph, embeddings and evaluation tools.
 fastapi>=0.115
 uvicorn[standard]>=0.30
 boto3[crt]>=1.42.21     # [crt] is needed for `aws login` credentials
@@ -7,6 +7,10 @@ psycopg[binary]>=3.2
 redis>=5.0              # Upstash Redis client
 pyyaml>=6.0
 python-dotenv>=1.0
+# phase 3: PII masking (pii/presidio_layer.py). spaCy model pinned to match spaCy 3.8.
+presidio-analyzer>=2.2.362,<2.3
+spacy>=3.8,<3.9
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 # tests and lint
 pytest>=8.0
 httpx>=0.27             # FastAPI TestClient

@@ -1,0 +1,170 @@
+[
+ {
+  "id": "NER-001",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Rohan Banerjee",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Yesterday I spoke with Ananya Iyer about the bonus and Ananya said it would be fixed this week.",
+  "raw_values": [
+   "Ananya",
+   "Ananya Iyer",
+   "Iyer"
+  ]
+ },
+ {
+  "id": "NER-002",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Divya Joshi",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Can you check why Rahul Verma's payslip still shows the old address?",
+  "raw_values": [
+   "Rahul",
+   "Rahul Verma",
+   "Verma"
+  ]
+ },
+ {
+  "id": "NER-003",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Meera Sharma",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Priya Gupta joined in March, but the joining bonus is missing from the October run.",
+  "raw_values": [
+   "Gupta",
+   "Priya",
+   "Priya Gupta"
+  ]
+ },
+ {
+  "id": "NER-004",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Sneha Sharma",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Our manager Karan Joshi approved the leave encashment, yet nothing was paid.",
+  "raw_values": [
+   "Joshi",
+   "Karan",
+   "Karan Joshi"
+  ]
+ },
+ {
+  "id": "NER-005",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Rohan Verma",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "The reimbursement for Priya Nair was rejected twice. Priya has the original receipts.",
+  "raw_values": [
+   "Nair",
+   "Priya",
+   "Priya Nair"
+  ]
+ },
+ {
+  "id": "NER-006",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Arjun Nair",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Please share the revised CTC letter with Sneha Verma before Friday.",
+  "raw_values": [
+   "Sneha",
+   "Sneha Verma",
+   "Verma"
+  ]
+ },
+ {
+  "id": "NER-007",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Meera Verma",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "We hired Rahul Singhania last month and the offer letter has the wrong designation.",
+  "raw_values": [
+   "Rahul",
+   "Rahul Singhania",
+   "Singhania"
+  ]
+ },
+ {
+  "id": "NER-008",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Sanjay Kulkarni",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Both Sneha Banerjee and I were charged professional tax twice in September.",
+  "raw_values": [
+   "Banerjee",
+   "Sneha",
+   "Sneha Banerjee"
+  ]
+ },
+ {
+  "id": "NER-009",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Meera Nair",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Kal Rahul Kulkarni ne bola tha ki arrears is mahine aa jayenge, par abhi tak kuch nahi aaya.",
+  "raw_values": [
+   "Kulkarni",
+   "Rahul",
+   "Rahul Kulkarni"
+  ]
+ },
+ {
+  "id": "NER-010",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Rahul Joshi",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Humare team mein Rahul Reddy ka bonus galat calculate hua hai, please dekh lo.",
+  "raw_values": [
+   "Rahul",
+   "Rahul Reddy",
+   "Reddy"
+  ]
+ },
+ {
+  "id": "NER-011",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Vikram Nair",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Maine Divya Iyer ko mail kiya tha but koi reply nahi aaya, ab kya karun?",
+  "raw_values": [
+   "Divya",
+   "Divya Iyer",
+   "Iyer"
+  ]
+ },
+ {
+  "id": "NER-012",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Priya Kulkarni",
+  "sender_email": null,
+  "sender_phone": null,
+  "body": "Is baar Amit Joshi aur mera dono ka PF deduct nahi hua.",
+  "raw_values": [
+   "Amit",
+   "Amit Joshi",
+   "Joshi"
+  ]
+ }
+]

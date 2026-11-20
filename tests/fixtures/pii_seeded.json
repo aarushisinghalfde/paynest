@@ -1,0 +1,1034 @@
+[
+ {
+  "id": "SEED-001",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Kavya Kulkarni",
+  "sender_email": "kavya.kulkarni@outlook.com",
+  "sender_phone": "+916893536706",
+  "body": "Hi team,\nMy name is Kavya Kulkarni. My October salary was not credited to account 98857776465 (IFSC HDFC0970841). Please check.\nPAN: LKFPK9841J\nRegards,\nKavya",
+  "raw_values": [
+   "98857776465",
+   "HDFC0970841",
+   "Kavya",
+   "Kavya Kulkarni",
+   "Kulkarni",
+   "LKFPK9841J"
+  ]
+ },
+ {
+  "id": "SEED-002",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Mariam Al Mazrouei",
+  "sender_email": "mariam.almazrouei@acme-corp.in",
+  "sender_phone": "+971500503280",
+  "body": "Hi, please update the bank details for staff member Omar Al Mansoori: IBAN AE942545620074041201046. Reach me at mariam.almazrouei@acme-corp.in.\nThanks,\nMariam Al Mazrouei",
+  "raw_values": [
+   "AE942545620074041201046",
+   "Mariam",
+   "Mariam Al Mazrouei",
+   "Omar",
+   "Omar Al Mansoori",
+   "mariam.almazrouei@acme-corp.in"
+  ]
+ },
+ {
+  "id": "SEED-003",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Arjun Malhotra",
+  "sender_email": "arjun.malhotra@outlook.com",
+  "sender_phone": "+918708664623",
+  "body": "Payslip shows the wrong TDS for my PAN RDCPM5673V. Contact arjun.malhotra@outlook.com or 8708664623.\n- Arjun Malhotra",
+  "raw_values": [
+   "8708664623",
+   "Arjun",
+   "Arjun Malhotra",
+   "Malhotra",
+   "RDCPM5673V",
+   "arjun.malhotra@outlook.com"
+  ]
+ },
+ {
+  "id": "SEED-004",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Fatima Al Mansoori",
+  "sender_email": "fatima.almansoori@yahoo.co.in",
+  "sender_phone": "+971523917170",
+  "body": "Dear Payce,\nI am Fatima Al Mansoori. My WPS salary transfer to IBAN AE51 7149 1202 4472 6399 564 failed. Emirates ID 784-1992-8928221-4. Mobile +971 52 391 7170.\nRegards,\nFatima Al Mansoori",
+  "raw_values": [
+   "523917170",
+   "784199289282214",
+   "AE517149120244726399564",
+   "Fatima",
+   "Fatima Al Mansoori"
+  ]
+ },
+ {
+  "id": "SEED-005",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Sanjay Kulkarni",
+  "sender_email": "sanjay.kulkarni@acme-corp.in",
+  "sender_phone": "+916538017587",
+  "body": "Hello,\nEmployee Kavya Gupta cannot see the PF contribution. UAN 109850677432. Aadhaar 8717 9514 0835. Call me on +91 65380 17587.\nThanks,\nSanjay Kulkarni",
+  "raw_values": [
+   "109850677432",
+   "6538017587",
+   "871795140835",
+   "Gupta",
+   "Kavya",
+   "Kavya Gupta",
+   "Kulkarni",
+   "Sanjay",
+   "Sanjay Kulkarni"
+  ]
+ },
+ {
+  "id": "SEED-006",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Omar Al Falasi",
+  "sender_email": "omar.alfalasi@yahoo.co.in",
+  "sender_phone": "+971546351340",
+  "body": "Ms. Hamdan Al Falasi has not received her end-of-service statement. Her Emirates ID is 784198687954655. Please call 0546351340.\nRegards,\nOmar",
+  "raw_values": [
+   "546351340",
+   "784198687954655",
+   "Hamdan",
+   "Hamdan Al Falasi",
+   "Omar"
+  ]
+ },
+ {
+  "id": "SEED-007",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Meera Nair",
+  "sender_email": "meera.nair@acme-corp.in",
+  "sender_phone": "+916774425665",
+  "body": "Hi team,\nMy name is Meera Nair. My October salary was not credited to account 50002914197273 (IFSC HDFC0913435). Please check.\nPAN: MIVPN5253W\nRegards,\nMeera",
+  "raw_values": [
+   "50002914197273",
+   "HDFC0913435",
+   "MIVPN5253W",
+   "Meera",
+   "Meera Nair",
+   "Nair"
+  ]
+ },
+ {
+  "id": "SEED-008",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Omar Al Mazrouei",
+  "sender_email": "omar.almazrouei@acme-corp.in",
+  "sender_phone": "+971502833586",
+  "body": "Hi, please update the bank details for staff member Yousef Al Hashimi: IBAN AE820303832825609231088. Reach me at omar.almazrouei@acme-corp.in.\nThanks,\nOmar Al Mazrouei",
+  "raw_values": [
+   "AE820303832825609231088",
+   "Omar",
+   "Omar Al Mazrouei",
+   "Yousef",
+   "Yousef Al Hashimi",
+   "omar.almazrouei@acme-corp.in"
+  ]
+ },
+ {
+  "id": "SEED-009",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Sneha Sharma",
+  "sender_email": "sneha.sharma@yahoo.co.in",
+  "sender_phone": "+918903142629",
+  "body": "Payslip shows the wrong TDS for my PAN NFTPS3346B. Contact sneha.sharma@yahoo.co.in or 8903142629.\n- Sneha Sharma",
+  "raw_values": [
+   "8903142629",
+   "NFTPS3346B",
+   "Sharma",
+   "Sneha",
+   "Sneha Sharma",
+   "sneha.sharma@yahoo.co.in"
+  ]
+ },
+ {
+  "id": "SEED-010",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Khalid Al Hashimi",
+  "sender_email": "khalid.alhashimi@gmail.com",
+  "sender_phone": "+971505356422",
+  "body": "Dear Payce,\nI am Khalid Al Hashimi. My WPS salary transfer to IBAN AE49 1699 3575 3496 7407 404 failed. Emirates ID 784-1986-5262712-0. Mobile +971 50 535 6422.\nRegards,\nKhalid Al Hashimi",
+  "raw_values": [
+   "505356422",
+   "784198652627120",
+   "AE491699357534967407404",
+   "Khalid",
+   "Khalid Al Hashimi"
+  ]
+ },
+ {
+  "id": "SEED-011",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Divya Patel",
+  "sender_email": "divya.patel@outlook.com",
+  "sender_phone": "+917774146436",
+  "body": "Hello,\nEmployee Meera Gupta cannot see the PF contribution. UAN 109340251925. Aadhaar 8531 0403 4175. Call me on +91 77741 46436.\nThanks,\nDivya Patel",
+  "raw_values": [
+   "109340251925",
+   "7774146436",
+   "853104034175",
+   "Divya",
+   "Divya Patel",
+   "Gupta",
+   "Meera",
+   "Meera Gupta",
+   "Patel"
+  ]
+ },
+ {
+  "id": "SEED-012",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Mariam Al Hashimi",
+  "sender_email": "mariam.alhashimi@gulfco.ae",
+  "sender_phone": "+971586895964",
+  "body": "Ms. Aisha Al Mansoori has not received her end-of-service statement. Her Emirates ID is 784198587422951. Please call 0586895964.\nRegards,\nMariam",
+  "raw_values": [
+   "586895964",
+   "784198587422951",
+   "Aisha",
+   "Aisha Al Mansoori",
+   "Mariam"
+  ]
+ },
+ {
+  "id": "SEED-013",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Divya Verma",
+  "sender_email": "divya.verma@outlook.com",
+  "sender_phone": "+919617877063",
+  "body": "Hi team,\nMy name is Divya Verma. My October salary was not credited to account 82449533283237 (IFSC KKBK0098675). Please check.\nPAN: XQIPV1985Y\nRegards,\nDivya",
+  "raw_values": [
+   "82449533283237",
+   "Divya",
+   "Divya Verma",
+   "KKBK0098675",
+   "Verma",
+   "XQIPV1985Y"
+  ]
+ },
+ {
+  "id": "SEED-014",
+  "language": "en",
+  "tenant_region": "AE",
+  "sender_name": "Layla Al Falasi",
+  "sender_email": "layla.alfalasi@yahoo.co.in",
+  "sender_phone": "+971540877683",
+  "body": "Hi, please update the bank details for staff member Noura Al Mansoori: IBAN AE890801989571215446956. Reach me at layla.alfalasi@yahoo.co.in.\nThanks,\nLayla Al Falasi",
+  "raw_values": [
+   "AE890801989571215446956",
+   "Layla",
+   "Layla Al Falasi",
+   "Noura",
+   "Noura Al Mansoori",
+   "layla.alfalasi@yahoo.co.in"
+  ]
+ },
+ {
+  "id": "SEED-015",
+  "language": "en",
+  "tenant_region": "IN",
+  "sender_name": "Meera Deshpande",
+  "sender_email": "meera.deshpande@outlook.com",
+  "sender_phone": "+917909934415",
+  "body": "Payslip shows the wrong TDS for my PAN HDXPD0897A. Contact meera.deshpande@outlook.com or 7909934415.\n- Meera Deshpande",
+  "raw_values": [
+   "7909934415",
+   "Deshpande",
+   "HDXPD0897A",
+   "Meera",
+   "Meera Deshpande",
+   "meera.deshpande@outlook.com"
+  ]
+ },
+ {
+  "id": "SEED-016",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Karan Patel",
+  "sender_email": "karan.patel@acme-corp.in",
+  "sender_phone": "+917042955104",
+  "body": "Namaste, mera naam Karan Patel hai. Meri salary abhi tak nahi aayi, account 6314500385759 hai. Mera number 7042955104 hai.\nShukriya,\nKaran",
+  "raw_values": [
+   "6314500385759",
+   "7042955104",
+   "Karan",
+   "Karan Patel",
+   "Patel"
+  ]
+ },
+ {
+  "id": "SEED-017",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Divya Nair",
+  "sender_email": "divya.nair@yahoo.co.in",
+  "sender_phone": "+917973548163",
+  "body": "Hi team, employee Kavya Menon ka UAN 107989044279 galat dikh raha hai. Aadhaar 629420147210 hai. Please check karo.\nThanks,\nDivya Nair",
+  "raw_values": [
+   "107989044279",
+   "629420147210",
+   "Divya",
+   "Divya Nair",
+   "Kavya",
+   "Kavya Menon",
+   "Menon",
+   "Nair"
+  ]
+ },
+ {
+  "id": "SEED-018",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Pooja Sharma",
+  "sender_email": "pooja.sharma@acme-corp.in",
+  "sender_phone": "+917720101894",
+  "body": "Bhai mera form 16 nahi mila. Mail karo pooja.sharma@acme-corp.in pe ya call karo +91-77201-01894.\nRegards,\nPooja Sharma",
+  "raw_values": [
+   "7720101894",
+   "Pooja",
+   "Pooja Sharma",
+   "Sharma",
+   "pooja.sharma@acme-corp.in"
+  ]
+ },
+ {
+  "id": "SEED-019",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Arjun Gupta",
+  "sender_email": "arjun.gupta@acme-corp.in",
+  "sender_phone": "+918845265357",
+  "body": "Namaste, mera naam Arjun Gupta hai. Meri salary abhi tak nahi aayi, account 8389855800611 hai. Mera number 8845265357 hai.\nShukriya,\nArjun",
+  "raw_values": [
+   "8389855800611",
+   "8845265357",
+   "Arjun",
+   "Arjun Gupta",
+   "Gupta"
+  ]
+ },
+ {
+  "id": "SEED-020",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Rohan Reddy",
+  "sender_email": "rohan.reddy@yahoo.co.in",
+  "sender_phone": "+917729005854",
+  "body": "Hi team, employee Rohan Malhotra ka UAN 107100323846 galat dikh raha hai. Aadhaar 518547501233 hai. Please check karo.\nThanks,\nRohan Reddy",
+  "raw_values": [
+   "107100323846",
+   "518547501233",
+   "Malhotra",
+   "Reddy",
+   "Rohan",
+   "Rohan Malhotra",
+   "Rohan Reddy"
+  ]
+ },
+ {
+  "id": "SEED-021",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Ananya Joshi",
+  "sender_email": "ananya.joshi@acme-corp.in",
+  "sender_phone": "+919939782694",
+  "body": "Bhai mera form 16 nahi mila. Mail karo ananya.joshi@acme-corp.in pe ya call karo +91-99397-82694.\nRegards,\nAnanya Joshi",
+  "raw_values": [
+   "9939782694",
+   "Ananya",
+   "Ananya Joshi",
+   "Joshi",
+   "ananya.joshi@acme-corp.in"
+  ]
+ },
+ {
+  "id": "SEED-022",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Rahul Banerjee",
+  "sender_email": "rahul.banerjee@yahoo.co.in",
+  "sender_phone": "+917611165351",
+  "body": "Namaste, mera naam Rahul Banerjee hai. Meri salary abhi tak nahi aayi, account 8373740305184 hai. Mera number 7611165351 hai.\nShukriya,\nRahul",
+  "raw_values": [
+   "7611165351",
+   "8373740305184",
+   "Banerjee",
+   "Rahul",
+   "Rahul Banerjee"
+  ]
+ },
+ {
+  "id": "SEED-023",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Arjun Gupta",
+  "sender_email": "arjun.gupta@gmail.com",
+  "sender_phone": "+917473366136",
+  "body": "Hi team, employee Pooja Joshi ka UAN 103846718574 galat dikh raha hai. Aadhaar 296369480632 hai. Please check karo.\nThanks,\nArjun Gupta",
+  "raw_values": [
+   "103846718574",
+   "296369480632",
+   "Arjun",
+   "Arjun Gupta",
+   "Gupta",
+   "Joshi",
+   "Pooja",
+   "Pooja Joshi"
+  ]
+ },
+ {
+  "id": "SEED-024",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Karan Gupta",
+  "sender_email": "karan.gupta@yahoo.co.in",
+  "sender_phone": "+916028701886",
+  "body": "Bhai mera form 16 nahi mila. Mail karo karan.gupta@yahoo.co.in pe ya call karo +91-60287-01886.\nRegards,\nKaran Gupta",
+  "raw_values": [
+   "6028701886",
+   "Gupta",
+   "Karan",
+   "Karan Gupta",
+   "karan.gupta@yahoo.co.in"
+  ]
+ },
+ {
+  "id": "SEED-025",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Priya Deshpande",
+  "sender_email": "priya.deshpande@gmail.com",
+  "sender_phone": "+917061565144",
+  "body": "Namaste, mera naam Priya Deshpande hai. Meri salary abhi tak nahi aayi, account 4000046789040 hai. Mera number 7061565144 hai.\nShukriya,\nPriya",
+  "raw_values": [
+   "4000046789040",
+   "7061565144",
+   "Deshpande",
+   "Priya",
+   "Priya Deshpande"
+  ]
+ },
+ {
+  "id": "SEED-026",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Arjun Malhotra",
+  "sender_email": "arjun.malhotra@gmail.com",
+  "sender_phone": "+917017225378",
+  "body": "Hi team, employee Priya Singhania ka UAN 108679507746 galat dikh raha hai. Aadhaar 225931220705 hai. Please check karo.\nThanks,\nArjun Malhotra",
+  "raw_values": [
+   "108679507746",
+   "225931220705",
+   "Arjun",
+   "Arjun Malhotra",
+   "Malhotra",
+   "Priya",
+   "Priya Singhania",
+   "Singhania"
+  ]
+ },
+ {
+  "id": "SEED-027",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Nikhil Nair",
+  "sender_email": "nikhil.nair@yahoo.co.in",
+  "sender_phone": "+917984325214",
+  "body": "Bhai mera form 16 nahi mila. Mail karo nikhil.nair@yahoo.co.in pe ya call karo +91-79843-25214.\nRegards,\nNikhil Nair",
+  "raw_values": [
+   "7984325214",
+   "Nair",
+   "Nikhil",
+   "Nikhil Nair",
+   "nikhil.nair@yahoo.co.in"
+  ]
+ },
+ {
+  "id": "SEED-028",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Kavya Malhotra",
+  "sender_email": "kavya.malhotra@gulfco.ae",
+  "sender_phone": "+918371109670",
+  "body": "Namaste, mera naam Kavya Malhotra hai. Meri salary abhi tak nahi aayi, account 6614263025160 hai. Mera number 8371109670 hai.\nShukriya,\nKavya",
+  "raw_values": [
+   "6614263025160",
+   "8371109670",
+   "Kavya",
+   "Kavya Malhotra",
+   "Malhotra"
+  ]
+ },
+ {
+  "id": "SEED-029",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Priya Reddy",
+  "sender_email": "priya.reddy@acme-corp.in",
+  "sender_phone": "+919225583515",
+  "body": "Hi team, employee Rohan Kulkarni ka UAN 109458844928 galat dikh raha hai. Aadhaar 274409731264 hai. Please check karo.\nThanks,\nPriya Reddy",
+  "raw_values": [
+   "109458844928",
+   "274409731264",
+   "Kulkarni",
+   "Priya",
+   "Priya Reddy",
+   "Reddy",
+   "Rohan",
+   "Rohan Kulkarni"
+  ]
+ },
+ {
+  "id": "SEED-030",
+  "language": "hi-Latn",
+  "tenant_region": "IN",
+  "sender_name": "Amit Chatterjee",
+  "sender_email": "amit.chatterjee@acme-corp.in",
+  "sender_phone": "+916466629860",
+  "body": "Bhai mera form 16 nahi mila. Mail karo amit.chatterjee@acme-corp.in pe ya call karo +91-64666-29860.\nRegards,\nAmit Chatterjee",
+  "raw_values": [
+   "6466629860",
+   "Amit",
+   "Amit Chatterjee",
+   "Chatterjee",
+   "amit.chatterjee@acme-corp.in"
+  ]
+ },
+ {
+  "id": "SEED-031",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "रोहन त्रिपाठी",
+  "sender_email": "sneha.chatterjee@gulfco.ae",
+  "sender_phone": "+916700142670",
+  "body": "नमस्ते,\nमेरा नाम रोहन त्रिपाठी है। मेरा वेतन खाता ४३४३४०२२७४८०९ में जमा नहीं हुआ। मेरा मोबाइल नंबर ६७००१४२६७० है।\nधन्यवाद,\nरोहन",
+  "raw_values": [
+   "4343402274809",
+   "6700142670",
+   "त्रिपाठी",
+   "रोहन",
+   "रोहन त्रिपाठी"
+  ]
+ },
+ {
+  "id": "SEED-032",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "प्रिया पटेल",
+  "sender_email": "sanjay.sharma@gmail.com",
+  "sender_phone": "+918853666562",
+  "body": "कर्मचारी राहुल मिश्रा का आधार 7115 3999 3437 और पैन GPBPS6450S है। कृपया पीएफ ठीक करें। ईमेल: sanjay.sharma@gmail.com\nसादर,\nप्रिया पटेल",
+  "raw_values": [
+   "711539993437",
+   "GPBPS6450S",
+   "sanjay.sharma@gmail.com",
+   "पटेल",
+   "प्रिया",
+   "प्रिया पटेल",
+   "मिश्रा",
+   "राहुल",
+   "राहुल मिश्रा"
+  ]
+ },
+ {
+  "id": "SEED-033",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "रोहन त्रिपाठी",
+  "sender_email": "meera.sharma@gmail.com",
+  "sender_phone": "+918414165842",
+  "body": "मुझे फॉर्म 16 नहीं मिला। आधार ९३८८३०९६६८०९, फोन +91 8414165842।\nधन्यवाद,\nरोहन त्रिपाठी",
+  "raw_values": [
+   "8414165842",
+   "938830966809",
+   "त्रिपाठी",
+   "रोहन",
+   "रोहन त्रिपाठी"
+  ]
+ },
+ {
+  "id": "SEED-034",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "अमित वर्मा",
+  "sender_email": "kavya.nair@outlook.com",
+  "sender_phone": "+918032739393",
+  "body": "नमस्ते,\nमेरा नाम अमित वर्मा है। मेरा वेतन खाता ६९९०९८९०७७८ में जमा नहीं हुआ। मेरा मोबाइल नंबर ८०३२७३९३९३ है।\nधन्यवाद,\nअमित",
+  "raw_values": [
+   "69909890778",
+   "8032739393",
+   "अमित",
+   "अमित वर्मा",
+   "वर्मा"
+  ]
+ },
+ {
+  "id": "SEED-035",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "विक्रम चौहान",
+  "sender_email": "meera.chatterjee@outlook.com",
+  "sender_phone": "+916660276089",
+  "body": "कर्मचारी प्रिया गुप्ता का आधार 9903 4012 2783 और पैन YTVPS9180B है। कृपया पीएफ ठीक करें। ईमेल: meera.chatterjee@outlook.com\nसादर,\nविक्रम चौहान",
+  "raw_values": [
+   "990340122783",
+   "YTVPS9180B",
+   "meera.chatterjee@outlook.com",
+   "गुप्ता",
+   "चौहान",
+   "प्रिया",
+   "प्रिया गुप्ता",
+   "विक्रम",
+   "विक्रम चौहान"
+  ]
+ },
+ {
+  "id": "SEED-036",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "अनन्या त्रिपाठी",
+  "sender_email": "kavya.patel@gmail.com",
+  "sender_phone": "+916528168432",
+  "body": "मुझे फॉर्म 16 नहीं मिला। आधार ५५६५६१८५०४४५, फोन +91 6528168432।\nधन्यवाद,\nअनन्या त्रिपाठी",
+  "raw_values": [
+   "556561850445",
+   "6528168432",
+   "अनन्या",
+   "अनन्या त्रिपाठी",
+   "त्रिपाठी"
+  ]
+ },
+ {
+  "id": "SEED-037",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "काव्या मिश्रा",
+  "sender_email": "priya.singhania@yahoo.co.in",
+  "sender_phone": "+917803925805",
+  "body": "नमस्ते,\nमेरा नाम काव्या मिश्रा है। मेरा वेतन खाता ०५३२४५९१७३७ में जमा नहीं हुआ। मेरा मोबाइल नंबर ७८०३९२५८०५ है।\nधन्यवाद,\nकाव्या",
+  "raw_values": [
+   "05324591737",
+   "7803925805",
+   "काव्या",
+   "काव्या मिश्रा",
+   "मिश्रा"
+  ]
+ },
+ {
+  "id": "SEED-038",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "विक्रम जोशी",
+  "sender_email": "meera.iyer@gmail.com",
+  "sender_phone": "+916687067152",
+  "body": "कर्मचारी स्नेहा सिंह का आधार 3757 9297 6771 और पैन GDFPS8194W है। कृपया पीएफ ठीक करें। ईमेल: meera.iyer@gmail.com\nसादर,\nविक्रम जोशी",
+  "raw_values": [
+   "375792976771",
+   "GDFPS8194W",
+   "meera.iyer@gmail.com",
+   "जोशी",
+   "विक्रम",
+   "विक्रम जोशी",
+   "सिंह",
+   "स्नेहा",
+   "स्नेहा सिंह"
+  ]
+ },
+ {
+  "id": "SEED-039",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "राहुल सिंह",
+  "sender_email": "vikram.verma@acme-corp.in",
+  "sender_phone": "+916068537448",
+  "body": "मुझे फॉर्म 16 नहीं मिला। आधार ६२०००३०३१६८१, फोन +91 6068537448।\nधन्यवाद,\nराहुल सिंह",
+  "raw_values": [
+   "6068537448",
+   "620003031681",
+   "राहुल",
+   "राहुल सिंह",
+   "सिंह"
+  ]
+ },
+ {
+  "id": "SEED-040",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "प्रिया वर्मा",
+  "sender_email": "rohan.menon@acme-corp.in",
+  "sender_phone": "+916516273843",
+  "body": "नमस्ते,\nमेरा नाम प्रिया वर्मा है। मेरा वेतन खाता ९६७७२६०९१०६८० में जमा नहीं हुआ। मेरा मोबाइल नंबर ६५१६२७३८४३ है।\nधन्यवाद,\nप्रिया",
+  "raw_values": [
+   "6516273843",
+   "9677260910680",
+   "प्रिया",
+   "प्रिया वर्मा",
+   "वर्मा"
+  ]
+ },
+ {
+  "id": "SEED-041",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "प्रिया गुप्ता",
+  "sender_email": "nikhil.verma@yahoo.co.in",
+  "sender_phone": "+918816279206",
+  "body": "कर्मचारी अनन्या यादव का आधार 8966 7105 0379 और पैन QZQPS9576G है। कृपया पीएफ ठीक करें। ईमेल: nikhil.verma@yahoo.co.in\nसादर,\nप्रिया गुप्ता",
+  "raw_values": [
+   "896671050379",
+   "QZQPS9576G",
+   "nikhil.verma@yahoo.co.in",
+   "अनन्या",
+   "अनन्या यादव",
+   "गुप्ता",
+   "प्रिया",
+   "प्रिया गुप्ता",
+   "यादव"
+  ]
+ },
+ {
+  "id": "SEED-042",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "मीरा सिंह",
+  "sender_email": "sanjay.banerjee@gulfco.ae",
+  "sender_phone": "+916271928465",
+  "body": "मुझे फॉर्म 16 नहीं मिला। आधार ७३७६९४५४४०३६, फोन +91 6271928465।\nधन्यवाद,\nमीरा सिंह",
+  "raw_values": [
+   "6271928465",
+   "737694544036",
+   "मीरा",
+   "मीरा सिंह",
+   "सिंह"
+  ]
+ },
+ {
+  "id": "SEED-043",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "अमित पटेल",
+  "sender_email": "karan.sharma@outlook.com",
+  "sender_phone": "+916014389184",
+  "body": "नमस्ते,\nमेरा नाम अमित पटेल है। मेरा वेतन खाता ६३२६२७६१२८५९६८ में जमा नहीं हुआ। मेरा मोबाइल नंबर ६०१४३८९१८४ है।\nधन्यवाद,\nअमित",
+  "raw_values": [
+   "6014389184",
+   "63262761285968",
+   "अमित",
+   "अमित पटेल",
+   "पटेल"
+  ]
+ },
+ {
+  "id": "SEED-044",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "मीरा यादव",
+  "sender_email": "kavya.kulkarni@gmail.com",
+  "sender_phone": "+919944144045",
+  "body": "कर्मचारी अनन्या त्रिपाठी का आधार 5972 2556 7953 और पैन HLCPS7700T है। कृपया पीएफ ठीक करें। ईमेल: kavya.kulkarni@gmail.com\nसादर,\nमीरा यादव",
+  "raw_values": [
+   "597225567953",
+   "HLCPS7700T",
+   "kavya.kulkarni@gmail.com",
+   "अनन्या",
+   "अनन्या त्रिपाठी",
+   "त्रिपाठी",
+   "मीरा",
+   "मीरा यादव",
+   "यादव"
+  ]
+ },
+ {
+  "id": "SEED-045",
+  "language": "hi",
+  "tenant_region": "IN",
+  "sender_name": "राहुल वर्मा",
+  "sender_email": "rahul.chatterjee@yahoo.co.in",
+  "sender_phone": "+917616528827",
+  "body": "मुझे फॉर्म 16 नहीं मिला। आधार ६१५५४४०८८९९०, फोन +91 7616528827।\nधन्यवाद,\nराहुल वर्मा",
+  "raw_values": [
+   "615544088990",
+   "7616528827",
+   "राहुल",
+   "राहुल वर्मा",
+   "वर्मा"
+  ]
+ },
+ {
+  "id": "SEED-046",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "حمدان النعيمي",
+  "sender_email": "hamdan.alfalasi@yahoo.co.in",
+  "sender_phone": "+971563236787",
+  "body": "مرحبا،\nاسمي حمدان النعيمي. لم يصل راتبي إلى الحساب AE378912949887949203230. رقم الهوية ٧٨٤-١٩٧٨-٩٣٦٩٢٩٤-٣. هاتفي ٠٥٦٣٢٣٦٧٨٧.\nمع التحية\nحمدان النعيمي",
+  "raw_values": [
+   "563236787",
+   "784197893692943",
+   "AE378912949887949203230",
+   "النعيمي",
+   "حمدان",
+   "حمدان النعيمي"
+  ]
+ },
+ {
+  "id": "SEED-047",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "مريم الشامسي",
+  "sender_email": "aisha.alfalasi@yahoo.co.in",
+  "sender_phone": "+971524030436",
+  "body": "الموظف عائشة النعيمي لا يرى قسيمة الراتب. البريد aisha.alfalasi@yahoo.co.in. رقم الجوال +971 52 403 0436.\nشكرا\nمريم الشامسي",
+  "raw_values": [
+   "524030436",
+   "aisha.alfalasi@yahoo.co.in",
+   "الشامسي",
+   "النعيمي",
+   "عائشة",
+   "عائشة النعيمي",
+   "مريم",
+   "مريم الشامسي"
+  ]
+ },
+ {
+  "id": "SEED-048",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "نورة الهاشمي",
+  "sender_email": "noura.alhashimi@yahoo.co.in",
+  "sender_phone": "+971525158636",
+  "body": "السيدة يوسف الفلاسي تحتاج شهادة راتب. رقم الهوية 784197805808843، الآيبان AE46 7417 4649 8368 7641 395.\nمع خالص التحيات\nنورة",
+  "raw_values": [
+   "784197805808843",
+   "AE467417464983687641395",
+   "الفلاسي",
+   "نورة",
+   "يوسف",
+   "يوسف الفلاسي"
+  ]
+ },
+ {
+  "id": "SEED-049",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "خالد المزروعي",
+  "sender_email": "noura.almansoori@gmail.com",
+  "sender_phone": "+971506268167",
+  "body": "مرحبا،\nاسمي خالد المزروعي. لم يصل راتبي إلى الحساب AE764262409748131266740. رقم الهوية ٧٨٤-١٩٨٨-٩٠٩٧٨٢٥-١. هاتفي ٠٥٠٦٢٦٨١٦٧.\nمع التحية\nخالد المزروعي",
+  "raw_values": [
+   "506268167",
+   "784198890978251",
+   "AE764262409748131266740",
+   "المزروعي",
+   "خالد",
+   "خالد المزروعي"
+  ]
+ },
+ {
+  "id": "SEED-050",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "فاطمة الشامسي",
+  "sender_email": "noura.alnuaimi@yahoo.co.in",
+  "sender_phone": "+971509504588",
+  "body": "الموظف عمر المنصوري لا يرى قسيمة الراتب. البريد noura.alnuaimi@yahoo.co.in. رقم الجوال +971 50 950 4588.\nشكرا\nفاطمة الشامسي",
+  "raw_values": [
+   "509504588",
+   "noura.alnuaimi@yahoo.co.in",
+   "الشامسي",
+   "المنصوري",
+   "عمر",
+   "عمر المنصوري",
+   "فاطمة",
+   "فاطمة الشامسي"
+  ]
+ },
+ {
+  "id": "SEED-051",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "يوسف النعيمي",
+  "sender_email": "omar.alfalasi@acme-corp.in",
+  "sender_phone": "+971586550905",
+  "body": "السيدة فاطمة النعيمي تحتاج شهادة راتب. رقم الهوية 784198414561203، الآيبان AE09 8085 8188 0906 5222 318.\nمع خالص التحيات\nيوسف",
+  "raw_values": [
+   "784198414561203",
+   "AE098085818809065222318",
+   "النعيمي",
+   "فاطمة",
+   "فاطمة النعيمي",
+   "يوسف"
+  ]
+ },
+ {
+  "id": "SEED-052",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "عمر المنصوري",
+  "sender_email": "yousef.almansoori@gmail.com",
+  "sender_phone": "+971542340899",
+  "body": "مرحبا،\nاسمي عمر المنصوري. لم يصل راتبي إلى الحساب AE581823535718376344166. رقم الهوية ٧٨٤-١٩٨٥-٦٢٤٨٧٩٦-١. هاتفي ٠٥٤٢٣٤٠٨٩٩.\nمع التحية\nعمر المنصوري",
+  "raw_values": [
+   "542340899",
+   "784198562487961",
+   "AE581823535718376344166",
+   "المنصوري",
+   "عمر",
+   "عمر المنصوري"
+  ]
+ },
+ {
+  "id": "SEED-053",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "أحمد النعيمي",
+  "sender_email": "omar.almansoori@outlook.com",
+  "sender_phone": "+971553829006",
+  "body": "الموظف مريم النعيمي لا يرى قسيمة الراتب. البريد omar.almansoori@outlook.com. رقم الجوال +971 55 382 9006.\nشكرا\nأحمد النعيمي",
+  "raw_values": [
+   "553829006",
+   "omar.almansoori@outlook.com",
+   "أحمد",
+   "أحمد النعيمي",
+   "النعيمي",
+   "مريم",
+   "مريم النعيمي"
+  ]
+ },
+ {
+  "id": "SEED-054",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "يوسف النعيمي",
+  "sender_email": "hamdan.almansoori@gmail.com",
+  "sender_phone": "+971586059871",
+  "body": "السيدة حمدان النعيمي تحتاج شهادة راتب. رقم الهوية 784200274242526، الآيبان AE88 0751 1207 9004 3971 186.\nمع خالص التحيات\nيوسف",
+  "raw_values": [
+   "784200274242526",
+   "AE880751120790043971186",
+   "النعيمي",
+   "حمدان",
+   "حمدان النعيمي",
+   "يوسف"
+  ]
+ },
+ {
+  "id": "SEED-055",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "ليلى النعيمي",
+  "sender_email": "fatima.alfalasi@outlook.com",
+  "sender_phone": "+971562112827",
+  "body": "مرحبا،\nاسمي ليلى النعيمي. لم يصل راتبي إلى الحساب AE930868054564229384652. رقم الهوية ٧٨٤-١٩٩٣-٢١٩٢٤٠٨-٨. هاتفي ٠٥٦٢١١٢٨٢٧.\nمع التحية\nليلى النعيمي",
+  "raw_values": [
+   "562112827",
+   "784199321924088",
+   "AE930868054564229384652",
+   "النعيمي",
+   "ليلى",
+   "ليلى النعيمي"
+  ]
+ },
+ {
+  "id": "SEED-056",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "خالد الهاشمي",
+  "sender_email": "fatima.alhashimi@acme-corp.in",
+  "sender_phone": "+971543089146",
+  "body": "الموظف خالد الهاشمي لا يرى قسيمة الراتب. البريد fatima.alhashimi@acme-corp.in. رقم الجوال +971 54 308 9146.\nشكرا\nخالد الهاشمي",
+  "raw_values": [
+   "543089146",
+   "fatima.alhashimi@acme-corp.in",
+   "الهاشمي",
+   "خالد",
+   "خالد الهاشمي"
+  ]
+ },
+ {
+  "id": "SEED-057",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "يوسف المنصوري",
+  "sender_email": "layla.alnuaimi@yahoo.co.in",
+  "sender_phone": "+971521035443",
+  "body": "السيدة عائشة المنصوري تحتاج شهادة راتب. رقم الهوية 784198612926851، الآيبان AE69 7829 0143 9126 7544 295.\nمع خالص التحيات\nيوسف",
+  "raw_values": [
+   "784198612926851",
+   "AE697829014391267544295",
+   "المنصوري",
+   "عائشة",
+   "عائشة المنصوري",
+   "يوسف"
+  ]
+ },
+ {
+  "id": "SEED-058",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "عمر النعيمي",
+  "sender_email": "hamdan.alhashimi@yahoo.co.in",
+  "sender_phone": "+971541494126",
+  "body": "مرحبا،\nاسمي عمر النعيمي. لم يصل راتبي إلى الحساب AE957965759722321591438. رقم الهوية ٧٨٤-١٩٩٩-٥٠٩١٦٩٥-٩. هاتفي ٠٥٤١٤٩٤١٢٦.\nمع التحية\nعمر النعيمي",
+  "raw_values": [
+   "541494126",
+   "784199950916959",
+   "AE957965759722321591438",
+   "النعيمي",
+   "عمر",
+   "عمر النعيمي"
+  ]
+ },
+ {
+  "id": "SEED-059",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "عائشة الفلاسي",
+  "sender_email": "mariam.alfalasi@outlook.com",
+  "sender_phone": "+971529794852",
+  "body": "الموظف عمر المزروعي لا يرى قسيمة الراتب. البريد mariam.alfalasi@outlook.com. رقم الجوال +971 52 979 4852.\nشكرا\nعائشة الفلاسي",
+  "raw_values": [
+   "529794852",
+   "mariam.alfalasi@outlook.com",
+   "الفلاسي",
+   "المزروعي",
+   "عائشة",
+   "عائشة الفلاسي",
+   "عمر",
+   "عمر المزروعي"
+  ]
+ },
+ {
+  "id": "SEED-060",
+  "language": "ar",
+  "tenant_region": "AE",
+  "sender_name": "مريم الهاشمي",
+  "sender_email": "layla.almansoori@yahoo.co.in",
+  "sender_phone": "+971548814733",
+  "body": "السيدة خالد الشامسي تحتاج شهادة راتب. رقم الهوية 784199187239803، الآيبان AE76 5197 6079 0840 4479 277.\nمع خالص التحيات\nمريم",
+  "raw_values": [
+   "784199187239803",
+   "AE765197607908404479277",
+   "الشامسي",
+   "خالد",
+   "خالد الشامسي",
+   "مريم"
+  ]
+ }
+]
