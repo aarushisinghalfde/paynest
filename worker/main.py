@@ -111,7 +111,8 @@ def build_gate():
 
     client = ModelClient(ledger=PgLedger(settings.DATABASE_URL))
     classifier = Classifier(similar_from_db(settings.DATABASE_URL), client if client.key else None,
-                            rung=config().get("defaults", {}).get("classify", 0))
+                            rung=config().get("defaults", {}).get("classify", 0),
+                            auto_at=float(config().get("defaults", {}).get("classify_auto_at", 0.5)))
     store = PgAgentStore(settings.DATABASE_URL)
     retriever = None
     if settings.DRAFTING == "on":

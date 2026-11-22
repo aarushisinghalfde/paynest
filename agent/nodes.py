@@ -110,15 +110,26 @@ def classify(state, deps: Deps):
     text = _question(state)
     if deps.classifier is None:  # phase 5 stand-in
         c = keywords.classify(text)
-        c["branch"] = "auto" if c["team"] and c["confidence"] >= 0.6 else "triage"
+        c["branch"] = "auto" if c["team"] and c["confidence"] >= 0.5 else "triage"
     else:
         c = deps.classifier.classify(text, ticket_id=state["ticket_id"])
     continues_howto = state.get("context_team") == "How-To"  # the answer to our How-To question
-    if (conversation.is_howto(text) or continues_howto) and not c.get("priority_signal") and not c.get("is_injection"):
-        # "how do I ..." with no sign of a problem is a how-to-use question (SOP: How-To team)
+    layers = c.get("layers") or {}
+    # How-to phrasing is only a tie-breaker. On the Q3 data, forcing every "how do I ..." to How-To
+    # cut accuracy from 95.9% to 86.3% (data migration -> Onboarding, PT slabs -> Statutory, ...).
+    # It decides only when the classifier is unsure and How-To is tied for first in the keywords or
+    # is the similar-tickets answer, or (no data loaded yet) when the keywords tie with How-To.
+    scores = keywords.classify(text).get("scores") or {}
+    howto_tied = bool(scores) and scores.get("How-To", 0) == max(scores.values())
+    tie_break = conversation.is_howto(text) and (
+        (deps.classifier is None and howto_tied)
+        or (c.get("branch") != "auto" and (howto_tied or layers.get("similar") == "How-To")))
+    if (tie_break or continues_howto) and not c.get("priority_signal") and not c.get("is_injection"):
         c = {**c, "second": c.get("team") if c.get("team") != "How-To" else c.get("second"), "team": "How-To",
-             "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.7),
+             "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.6),
              "source": f"{c.get('source', 'keywords')}+howto_phrase"}
+    if state.get("talk") in ("greeting", "thanks", "status"):  # not a support topic: no team
+        c = {**c, "team": None, "branch": "chat", "source": "conversation"}
     return {
         "team": c["team"],
         "confidence": c["confidence"],

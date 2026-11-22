@@ -3,6 +3,7 @@
 
     $env:AWS_PROFILE = "payce-fde"
     python scripts\\check_bedrock.py
+    python scripts\\check_bedrock.py --profile other-account      (any account you can sign in to)
 
 Read-only except two tiny model calls ("reply OK", <= 5 output tokens, a fraction of a cent).
 Each step prints PASS / FAIL with AWS's own error code, which says what to do next:
@@ -18,7 +19,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.phase4_remote import REGION, aws, check_account  # noqa: E402
+import argparse  # noqa: E402
+
+import boto3  # noqa: E402
+
+REGION = "ap-southeast-2"
+_session = None
+
+
+def aws(service: str):
+    return _session.client(service)
 
 WANT = [("nova-micro", "Amazon Nova Micro (no form needed)"), ("claude-haiku-4-5", "Claude Haiku 4.5 (needs the Anthropic form)")]
 
@@ -30,12 +40,19 @@ def err(e) -> str:
 
 
 def main() -> int:
-    print("account", check_account(), "region", REGION)
+    global _session
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--profile", help="AWS CLI profile (default: $AWS_PROFILE)")
+    ap.add_argument("--region", default=REGION)
+    args = ap.parse_args()
+    _session = boto3.Session(profile_name=args.profile, region_name=args.region)
+    ident = aws("sts").get_caller_identity()
+    print("account", ident["Account"], "as", ident["Arn"].split(":")[-1], "region", args.region)
     bedrock, runtime = aws("bedrock"), aws("bedrock-runtime")
 
     try:
         models = bedrock.list_foundation_models()["modelSummaries"]
-        print(f"PASS  list models: {len(models)} foundation models offered in {REGION}")
+        print(f"PASS  list models: {len(models)} foundation models offered in {args.region}")
     except Exception as e:  # noqa: BLE001
         print("FAIL  list models:", err(e))
         return 1
@@ -59,7 +76,7 @@ def main() -> int:
         # prefer an Australia / Asia-Pacific cross-region profile, then the plain model id
         candidates.sort(key=lambda i: (not i.startswith("au."), not i.startswith("apac."), i))
         if not candidates:
-            print(f"FAIL  {label}: not offered in {REGION}")
+            print(f"FAIL  {label}: not offered in {args.region}")
             continue
         mid = candidates[0]
         try:

@@ -97,7 +97,8 @@ class PgAgentStore(PgTicketStore):
             rows = conn.execute("""SELECT id::text, ticket_ref, created_at, coalesce(subject_masked, '') || ' ' ||
                                           coalesce(masked_body, ''), incident_id::text, duplicate_of_ref
                                    FROM tickets WHERE tenant_id = %s AND id <> %s AND status = 'masked'
-                                     AND created_at BETWEEN %s - make_interval(hours => %s) AND %s
+                                     AND created_at BETWEEN %s::timestamptz - make_interval(hours => %s)
+                                                        AND %s::timestamptz
                                    ORDER BY created_at DESC LIMIT 500""",
                                 (tenant_id, exclude_id, created_at, hours, created_at)).fetchall()
         return [Recent(*r) for r in rows]

@@ -22,3 +22,7 @@ budget:
 defaults:
   classify: 0
   draft: 1
+  # Auto-route when the classifier's confidence is at least this. Q3 check (latest 20% of tickets,
+  # trained on the earlier 80%): 0.6 -> 145/271 auto-routed at 99.3%; 0.5 -> 260/271 at 95.9%
+  # overall, the same accuracy as today's triage outcome, with ~1/10 of the triage-desk load.
+  classify_auto_at: 0.5

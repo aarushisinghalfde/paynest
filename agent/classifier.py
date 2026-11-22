@@ -116,12 +116,14 @@ def decide(kw: dict, sim: dict, model: dict | None = None, auto_at: float = 0.6)
 class Classifier:
     """Runs the layers; calls the model only when keywords and similar tickets disagree or are unsure."""
 
-    def __init__(self, similar: SimilarTickets | None = None, model_client=None, rung: int = 0):
+    def __init__(self, similar: SimilarTickets | None = None, model_client=None, rung: int = 0,
+                 auto_at: float = 0.5):
         self.similar, self.client, self.rung = similar or SimilarTickets(), model_client, rung
+        self.auto_at = auto_at  # 0.5 from the real-data check: same accuracy as 0.6, 1/10 of the triage load
 
     def classify(self, text: str, ticket_id=None) -> dict:
         kw, sim = keywords.classify(text), self.similar.predict(text)
-        first = decide(kw, sim)
+        first = decide(kw, sim, auto_at=self.auto_at)
         if first["branch"] == "auto" or self.client is None:
             return {**first, "model_called": False}
         try:
@@ -136,7 +138,7 @@ class Classifier:
         except Exception as exc:  # noqa: BLE001 - budget or provider down: keep the cheap answer
             return {**first, "model_called": False, "model_error": type(exc).__name__}
         return {
-            **decide(kw, sim, model),
+            **decide(kw, sim, model, auto_at=self.auto_at),
             "model_called": True,
             "model_id": res.model,
             "rung": res.rung,
