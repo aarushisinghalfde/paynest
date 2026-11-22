@@ -19,3 +19,6 @@ data/masked/
 
 # masked client data (labelled sets): never in the public repo
 evals/local/
+
+# live-check logs (scripts/run_checks.ps1)
+checks_*.log
