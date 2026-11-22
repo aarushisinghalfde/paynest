@@ -18,7 +18,7 @@ export default function App() {
       <ul>
         <li><a href="/chat">Customer chat</a></li>
         <li><a href="/review">Reviewer console</a></li>
-        <li><a href="/dashboard">Operations dashboard</a></li>
+        <li><a href="/dashboard">Support console (lead)</a></li>
         <li><a href="/knowledge">Knowledge import</a></li>
       </ul>
       <ApiStatus />

@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import Counter
 
-from agent import guard, metrics
+from agent import faithfulness, guard, metrics
 from agent.classifier import TEAM_LIST, Classifier, SimilarTickets
 from agent.nodes import Deps
 from agent.retrieval import Retriever
@@ -20,7 +20,7 @@ from intake.vault import MemoryVault
 from loader import labelled
 from loader.build import build
 
-GATE_OVERALL, GATE_LANGUAGE, GATE_GUARD = 0.90, 0.85, 0.95
+GATE_OVERALL, GATE_LANGUAGE, GATE_GUARD, GATE_FAITHFUL = 0.90, 0.85, 0.95, 0.90
 SENT_TIERS = ("library", "cache", "model", "fallback")
 
 
@@ -43,23 +43,30 @@ def _deps(ds, held_out: set[str]):
     return store, deps
 
 
-def evaluate(ds, n: int = 200) -> dict:
+def evaluate(ds, n: int = 200, model=None) -> dict:
+    """model: a ModelClient. With one, drafts are model-written and C2 faithfulness is judged."""
     chosen = labelled.stratified(ds.tables["tickets"], n=n)
     store, deps = _deps(ds, {t["ticket_ref"] for t in chosen})
-    rows = []
+    deps.model = model
+    rows, judged = [], []
     for t in chosen:
         text = f"{t['subject_masked'] or ''}. {t['masked_body'] or ''}".strip(". ")
         tid = store.create(t["tenant_id"], "chat", text, None)
         store.save_progress(tid, conversation_id=f"eval-{uuid.uuid4().hex[:12]}", created_at=t["created_at"])
         st = run(tid, deps, MemoryCheckpoints())
         sent = " ".join(r["body"] for r in store.replies(tid))
+        if model is not None and st.get("draft_mode") == "model" and st.get("draft"):
+            judged.append(faithfulness.judge(st["draft"], st.get("sources") or {}, model,
+                                             rung=0 if deps.draft_rung else 1))
         rows.append({"ref": t["ticket_ref"], "language": t["language"], "gold": t["team"],
                      "customer_pick": t["initial_team"], "pred": st.get("team"),
                      "branch": (st.get("classification") or {}).get("branch"), "route": st.get("route"),
                      "rule": st.get("route_rule"), "tier": st.get("draft_mode"), "sent": bool(st.get("sent")),
                      "guard_ok": (st.get("guard") or {}).get("ok"), "guard_problems": (st.get("guard") or {}).get("problems"),
                      "sent_text": sent, "masked": text})
-    return summarize(rows)
+    out = summarize(rows)
+    out["faithfulness"] = faithfulness.summarize(judged) if model is not None else None
+    return out
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -106,7 +113,12 @@ def gates(ev: dict) -> list[tuple[str, bool, str]]:
     c, g = ev["classification"], ev["guard"]
     worst = min(c["by_language"].items(), key=lambda kv: kv[1]) if c["by_language"] else ("-", 0)
     pass_rate = g["passed"] / g["drafts"] if g["drafts"] else 1.0
-    return [
+    f = ev.get("faithfulness")
+    faith = [] if not f else [(
+        "faithfulness", f["score"] is not None and f["score"] >= GATE_FAITHFUL,
+        f"{f['supported']}/{f['claims']} claims supported by the cited sources ({f['score']}) in "
+        f"{f['drafts_judged']} model drafts; model-judged, read as indicative")]
+    return faith + [
         ("classify_accuracy", c["accuracy"] >= GATE_OVERALL and worst[1] >= GATE_LANGUAGE,
          f"{c['accuracy']:.1%} (customer pick {c['customer_pick']:.1%}), macro-F1 {c['macro_f1']:.3f}; "
          f"lowest language {worst[0]} {worst[1]:.0%}"),

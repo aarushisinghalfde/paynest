@@ -87,6 +87,34 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001
             print(f"FAIL  {label} via {mid}: {err(e)}")
 
+    # The exact ids a working Payce pilot in another free-plan account uses in Sydney (verified there by
+    # direct Converse calls on 19 Nov 2026). If these pass here, Bedrock works for us too.
+    print("-- ids known to work on another account in this region --")
+    for mid in ("apac.amazon.nova-micro-v1:0", "apac.amazon.nova-lite-v1:0", "apac.amazon.nova-pro-v1:0",
+                "amazon.nova-micro-v1:0", "au.anthropic.claude-haiku-4-5-20251001-v1:0"):
+        try:
+            r = runtime.converse(modelId=mid, messages=[{"role": "user", "content": [{"text": "Reply with OK"}]}],
+                                 inferenceConfig={"maxTokens": 5, "temperature": 0})
+            print(f"PASS  converse {mid}: {r['output']['message']['content'][0]['text']!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"FAIL  converse {mid}: {err(e)}")
+    try:
+        import json as _json
+        r = runtime.invoke_model(modelId="amazon.titan-embed-text-v2:0",
+                                 body=_json.dumps({"inputText": "ok", "dimensions": 256}))
+        print(f"PASS  embed amazon.titan-embed-text-v2:0: {len(_json.loads(r['body'].read())['embedding'])} dims")
+    except Exception as e:  # noqa: BLE001
+        print(f"FAIL  embed amazon.titan-embed-text-v2:0: {err(e)}")
+    try:
+        quotas = aws("service-quotas").list_service_quotas(ServiceCode="bedrock", MaxResults=100)["Quotas"]
+        nova = [q for q in quotas if "nova micro" in q["QuotaName"].lower() and "requests per minute" in q["QuotaName"].lower()]
+        for q in nova[:3]:
+            print(f"INFO  quota {q['QuotaName']}: {q['Value']}")
+        if not nova:
+            print(f"INFO  {len(quotas)} Bedrock quotas listed; none named for Nova Micro on-demand requests")
+    except Exception as e:  # noqa: BLE001
+        print("INFO  service quotas:", err(e))
+
     try:
         rts = aws("bedrock-agentcore-control").list_agent_runtimes()["agentRuntimes"]
         names = [r["agentRuntimeName"] for r in rts]

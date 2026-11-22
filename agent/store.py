@@ -64,9 +64,11 @@ class PgAgentStore(PgTicketStore):
 
     def save_progress(self, ticket_id: str, **fields) -> None:
         allowed = {"agent_status", "route", "route_reason", "classification", "team", "language",
-                   "duplicate_of_ref", "jira_key", "incident_id", "conversation_id", "route_rule", "answer_tier"}
+                   "duplicate_of_ref", "jira_key", "incident_id", "conversation_id", "route_rule", "answer_tier",
+                   "decision", "translation"}
         fields = {
-            k: (json.dumps(v) if k == "classification" else v) for k, v in fields.items() if k in allowed
+            k: (json.dumps(v, default=str) if k in ("classification", "decision", "translation") else v)
+            for k, v in fields.items() if k in allowed
         }
         if not fields:
             return
@@ -132,9 +134,9 @@ class PgAgentStore(PgTicketStore):
     def create_review(self, ticket_id, draft_version, draft, reason, kind="reply", kb_ids=None):
         tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"review:{ticket_id}:{draft_version}:{kind}"))
         with self._conn() as conn:
-            conn.execute("""INSERT INTO review_tasks (id, ticket_id, draft, route_reason, sources, kind)
-                            VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
-                         (tid, ticket_id, draft, reason, json.dumps(kb_ids or []), kind))
+            conn.execute("""INSERT INTO review_tasks (id, ticket_id, draft, route_reason, sources, kind, proposed_draft)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                         (tid, ticket_id, draft, reason, json.dumps(kb_ids or []), kind, draft))
         return tid
 
     def list_reviews(self, status="open"):
@@ -156,10 +158,14 @@ class PgAgentStore(PgTicketStore):
             if decision == "approve" and kind[0] == "knowledge" and not (body or "").strip():
                 raise ValueError("write the answer before approving")
             row = conn.execute("""UPDATE review_tasks SET status = %s, decision = %s, assignee = %s,
-                                         draft = coalesce(%s, draft), decided_at = now()
+                                         draft = coalesce(%s, draft), decided_at = now(),
+                                         outcome = CASE WHEN %s <> 'approve' THEN 'rejected'
+                                                        WHEN trim(coalesce(%s, draft)) IS NOT DISTINCT FROM
+                                                             trim(coalesce(proposed_draft, draft)) THEN 'approved_as_is'
+                                                        ELSE 'edited' END
                                   WHERE id = %s AND status = 'open' RETURNING ticket_id::text, draft, sources""",
                                ("approved" if decision == "approve" else "rejected", decision, reviewer, body,
-                                task_id)).fetchone()
+                                decision, body, task_id)).fetchone()
             if row is None:
                 return None
             ticket_id, draft, sources = row
@@ -209,6 +215,65 @@ class PgAgentStore(PgTicketStore):
                                            GROUP BY kind, status""").fetchall())
             library = conn.execute("SELECT count(*) FROM howto_answers WHERE active").fetchone()[0]
         return {"tickets": tickets, "incidents": incidents, "reviews": reviews, "library_size": library}
+
+    # ---- phase G: support-head console --------------------------------------------------------
+    def console_rows(self, days: int = 7) -> list[dict]:
+        """Live tickets with their decision record and the latest reply-review outcome (masked only)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT t.id::text, coalesce(t.ticket_ref, left(t.id::text, 8)), t.created_at, t.tenant_id,
+                          t.language, t.team, t.route, t.route_rule, t.answer_tier, t.agent_status, t.classification,
+                          t.decision, t.translation IS NOT NULL, t.feedback, left(coalesce(t.masked_body, ''), 200),
+                          r.outcome, extract(epoch FROM (r.decided_at - r.created_at)) / 60
+                   FROM tickets t
+                   LEFT JOIN LATERAL (SELECT outcome, decided_at, created_at FROM review_tasks
+                                      WHERE ticket_id = t.id AND kind = 'reply'
+                                      ORDER BY created_at DESC LIMIT 1) r ON true
+                   WHERE t.origin = 'live' AND t.created_at >= now() - make_interval(days => %s)
+                   ORDER BY t.created_at DESC LIMIT 5000""", (days,)).fetchall()
+        keys = ("id", "ref", "created_at", "tenant_id", "language", "team", "route", "route_rule", "answer_tier",
+                "agent_status", "classification", "decision", "translation", "feedback", "masked_body",
+                "review_outcome", "review_minutes")
+        out = [dict(zip(keys, r, strict=True)) for r in rows]
+        for t in out:
+            t["review_minutes"] = float(t["review_minutes"]) if t["review_minutes"] is not None else None
+        return out
+
+    def model_cost(self, days: int = 7) -> float:
+        with self._conn() as conn:
+            return float(conn.execute("""SELECT coalesce(sum(cost_usd), 0) FROM cost_ledger
+                                         WHERE ts >= now() - make_interval(days => %s)""", (days,)).fetchone()[0])
+
+    def console_ticket(self, ticket_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT t.id::text, coalesce(t.ticket_ref, left(t.id::text, 8)), t.created_at, t.tenant_id,
+                          tn.region, t.channel, t.language, t.team, t.route, t.route_rule, t.route_reason,
+                          t.answer_tier, t.agent_status, t.classification, t.decision, t.translation, t.feedback,
+                          t.masked_body, t.conversation_id, t.pii_counts
+                   FROM tickets t LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id
+                   WHERE t.id = %s AND t.origin = 'live'""", (ticket_id,)).fetchone()
+            if row is None:
+                return None
+            keys = ("id", "ref", "created_at", "tenant_id", "region", "channel", "language", "team", "route",
+                    "route_rule", "route_reason", "answer_tier", "agent_status", "classification", "decision",
+                    "translation", "feedback", "masked_body", "conversation_id", "pii_counts")
+            t = dict(zip(keys, row, strict=True))
+            t["replies"] = [{"version": v, "body": b, "sent_at": a} for v, b, a in conn.execute(
+                """SELECT draft_version, body_masked, sent_at FROM sent_replies WHERE ticket_id = %s
+                   ORDER BY draft_version""", (ticket_id,)).fetchall()]
+            t["reviews"] = [dict(zip(("kind", "status", "outcome", "proposed_draft", "final_draft", "reason",
+                                      "reviewer", "created_at", "decided_at"), r, strict=True)) for r in conn.execute(
+                """SELECT kind, status, outcome, proposed_draft, draft, route_reason, assignee, created_at, decided_at
+                   FROM review_tasks WHERE ticket_id = %s ORDER BY created_at""", (ticket_id,)).fetchall()]
+        t["review_outcome"] = next((r["outcome"] for r in reversed(t["reviews"]) if r["kind"] == "reply"), None)
+        return t
+
+    def set_feedback(self, ticket_id: str, value: str) -> bool:
+        with self._conn() as conn:
+            return conn.execute("""UPDATE tickets SET feedback = %s, feedback_at = now()
+                                   WHERE id = %s AND origin = 'live' RETURNING id""",
+                                (value, ticket_id)).fetchone() is not None
 
     # ---- phase B: knowledge import ---------------------------------------------------------
     def import_articles(self, articles, imported_by=None) -> list[dict]:
@@ -387,6 +452,46 @@ class MemoryAgentStore(MemoryTicketStore):
     def tenant(self, tenant_id):
         return self.tenants.get(tenant_id)
 
+    # phase G (memory): console
+    def console_rows(self, days=7):
+        out = []
+        for tid, t in self.tickets.items():
+            rv = [r for r in (self.reviews or {}).values() if r["ticket_id"] == tid and r.get("kind") == "reply"]
+            out.append({"id": tid, "ref": t.get("ticket_ref") or tid[:8], "created_at": t.get("created_at"),
+                        "tenant_id": t["tenant_id"], "language": t.get("language"), "team": t.get("team"),
+                        "route": t.get("route"), "route_rule": t.get("route_rule"), "answer_tier": t.get("answer_tier"),
+                        "agent_status": t.get("agent_status"), "classification": t.get("classification"),
+                        "decision": t.get("decision"), "translation": bool(t.get("translation")),
+                        "feedback": t.get("feedback"), "masked_body": (t.get("masked_body") or "")[:200],
+                        "review_outcome": rv[-1].get("outcome") if rv else None, "review_minutes": None})
+        return out
+
+    def model_cost(self, days=7):
+        return 0.0
+
+    def console_ticket(self, ticket_id):
+        t = self.tickets.get(ticket_id)
+        if t is None:
+            return None
+        rv = [r for r in (self.reviews or {}).values() if r["ticket_id"] == ticket_id]
+        out = {**{k: t.get(k) for k in ("tenant_id", "language", "team", "route", "route_rule", "route_reason",
+                                        "answer_tier", "agent_status", "classification", "decision", "translation",
+                                        "feedback", "masked_body", "conversation_id")},
+               "id": ticket_id, "ref": t.get("ticket_ref") or ticket_id[:8],
+               "region": (self.tenants.get(t["tenant_id"]) or {}).get("region"),
+               "replies": [{"version": r["draft_version"], "body": r["body"]} for r in self.replies(ticket_id)],
+               "reviews": [{"kind": r.get("kind"), "status": r["status"], "outcome": r.get("outcome"),
+                            "proposed_draft": r.get("proposed_draft"), "final_draft": r.get("draft"),
+                            "reason": r.get("route_reason"), "reviewer": r.get("assignee")} for r in rv]}
+        out["review_outcome"] = next((r["outcome"] for r in reversed(out["reviews"]) if r["kind"] == "reply"), None)
+        return out
+
+    def set_feedback(self, ticket_id, value):
+        if ticket_id not in self.tickets:
+            return False
+        self.tickets[ticket_id]["feedback"] = value
+        return True
+
     # phase 7 (memory): tickets need "created_at" set by the test
     incidents: dict = None
     jira: list = None
@@ -427,7 +532,8 @@ class MemoryAgentStore(MemoryTicketStore):
         self.reviews = self.reviews or {}
         rid = f"{ticket_id}:{draft_version}:{kind}"
         self.reviews.setdefault(rid, {"id": rid, "ticket_id": ticket_id, "draft": draft, "route_reason": reason,
-                                      "status": "open", "kind": kind, "kb_ids": kb_ids or []})
+                                      "status": "open", "kind": kind, "kb_ids": kb_ids or [],
+                                      "proposed_draft": draft})
         return rid
 
     def howto_answers(self, region, language):
@@ -516,6 +622,10 @@ class MemoryAgentStore(MemoryTicketStore):
                                  "answer": body, "kb_ids": r.get("kb_ids") or [], "language": t.get("language") or "en",
                                  "region": (self.tenants.get(t["tenant_id"]) or {}).get("region")})
         r["status"] = "approved" if decision == "approve" else "rejected"
+        final = (body if body is not None else r["draft"]) or ""
+        r["outcome"] = ("rejected" if decision != "approve" else
+                        "approved_as_is" if final.strip() == (r.get("proposed_draft") or "").strip() else "edited")
+        r["draft"], r["assignee"] = final, reviewer
         if decision == "approve":
             n = len(self.replies(r["ticket_id"])) + 1
             self.insert_reply(r["ticket_id"], n, body or r["draft"], "chat")

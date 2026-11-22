@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-11-22T16:25:19+00:00",
+  "labelled_set": {
+    "n": 200,
+    "classification": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "customer_pick": 0.88,
+      "by_language": {
+        "ar": 1.0,
+        "en": 1.0,
+        "hi": 1.0,
+        "hi-Latn": 1.0
+      },
+      "by_team": {
+        "Access / Login": 1.0,
+        "Billing": 1.0,
+        "How-To": 1.0,
+        "Integration": 1.0,
+        "Leave & Attendance": 1.0,
+        "Onboarding": 1.0,
+        "Payroll": 1.0,
+        "Reports": 1.0,
+        "Statutory": 1.0
+      },
+      "auto_share": 0.975,
+      "auto_accuracy": 1.0,
+      "payroll_vs_statutory": {
+        "Payroll->Statutory": 0,
+        "Statutory->Payroll": 0
+      }
+    },
+    "routes": {
+      "reply": 177,
+      "review": 19,
+      "queue": 4
+    },
+    "rules": {
+      "R99-default": 118,
+      "R11-howto": 59,
+      "R07-statutory": 19,
+      "R09-clarify": 3,
+      "R10-low-confidence": 1
+    },
+    "answer_tiers": {
+      "template": 106,
+      "fallback": 94
+    },
+    "statutory": {
+      "n": 19,
+      "answered_without_a_person": []
+    },
+    "sent_dirty": [],
+    "guard": {
+      "drafts": 200,
+      "passed": 200,
+      "problems": {}
+    },
+    "howto": {
+      "n": 59,
+      "answered_automatically": 59
+    },
+    "wrong": []
+  },
+  "replay": {
+    "dedupe": {
+      "gold_pairs": 26,
+      "predicted": 26,
+      "true": 26,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "meridian": {
+      "tickets_on_25_sep": 33,
+      "incidents": 1,
+      "opened_by_ticket_n": 5,
+      "attached": 30
+    },
+    "other_incidents_opened": 0,
+    "pnj_4412": {
+      "linked_in_jira": 48,
+      "matched": 16
+    },
+    "injection_blocked": [
+      "PN-101129"
+    ]
+  },
+  "gates": [
+    {
+      "gate": "classify_accuracy",
+      "pass": true,
+      "detail": "100.0% (customer pick 88.0%), macro-F1 1.000; lowest language ar 100%"
+    },
+    {
+      "gate": "statutory_never_auto",
+      "pass": true,
+      "detail": "0 of 19 Statutory tickets answered without a person"
+    },
+    {
+      "gate": "sent_replies_clean",
+      "pass": true,
+      "detail": "0 sent replies with PII or unknown tokens"
+    },
+    {
+      "gate": "guard_pass_rate",
+      "pass": true,
+      "detail": "200/200 drafts passed (100%); problems none"
+    },
+    {
+      "gate": "dedupe_precision",
+      "pass": true,
+      "detail": "26/26 predicted duplicates correct (100%); recall 100% of 26 resubmits"
+    },
+    {
+      "gate": "meridian_incident",
+      "pass": true,
+      "detail": "1 incident(s) for 33 tickets, opened at ticket 5; 30 attached; 0 other incidents"
+    }
+  ]
+}

@@ -52,6 +52,17 @@ export default function Chat() {
   // One conversation per page visit: the agent reads follow-ups together with earlier turns.
   const [conversationId] = useState(() => crypto.randomUUID())
   const bottom = useRef(null)
+  const [feedback, setFeedback] = useState({})   // ticketId -> true once answered
+
+  // "Did this solve it?" goes to the support lead's console (a trust signal next to approvals).
+  async function sendFeedback(ticketId, solved) {
+    setFeedback((f) => ({ ...f, [ticketId]: true }))
+    try {
+      await fetch(`/api/tickets/${ticketId}/feedback`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ solved }),
+      })
+    } catch { /* best effort */ }
+  }
 
   async function send(e, preset) {
     e?.preventDefault()
@@ -129,6 +140,15 @@ export default function Chat() {
               ))}
               {!t.replies.length && <Bubble who="bot"><i style={{ color: '#555' }}>{STATUS[t.status] || STATUS.running}</i></Bubble>}
               {!!t.replies.length && t.status === 'waiting_review' && <Bubble who="bot"><i>{STATUS.waiting_review}</i></Bubble>}
+              {!!t.replies.length && t.status === 'replied' && t.route === 'reply' && (
+                <div style={{ fontSize: 13, color: '#555', margin: '2px 0 10px' }}>
+                  {feedback[m.ticketId] ? 'Thanks, noted.' : (
+                    <>Did this solve it?{' '}
+                      <button onClick={() => sendFeedback(m.ticketId, true)} style={{ fontSize: 12 }}>Yes</button>{' '}
+                      <button onClick={() => sendFeedback(m.ticketId, false)} style={{ fontSize: 12 }}>No</button></>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

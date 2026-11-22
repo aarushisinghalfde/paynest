@@ -12,7 +12,16 @@ providers:
       - google/gemini-2.5-flash
   bedrock:
     region: ap-southeast-2
-    ladder: []                       # fill in after re-running phase0_checks.py once AWS lifts the hold
+    # Amazon Nova through the APAC inference profiles (no Anthropic form needed). Not callable on
+    # this account yet ("Operation not allowed" on every model, 22 Nov): scripts/check_bedrock.py
+    # shows when it is. Claude Haiku (au.anthropic.claude-haiku-4-5-20251001-v1:0) can replace
+    # rung 1 once the Anthropic use-case form is accepted.
+    ladder:
+      - apac.amazon.nova-micro-v1:0
+      - apac.amazon.nova-pro-v1:0
+    prices:                          # USD per 1,000 tokens; check the AWS price list for ap-southeast-2
+      apac.amazon.nova-micro-v1:0: {in: 0.000035, out: 0.00014}
+      apac.amazon.nova-pro-v1:0: {in: 0.0008, out: 0.0032}
 
 budget:
   daily_usd_cap: 0.50

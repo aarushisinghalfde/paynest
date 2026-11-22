@@ -89,6 +89,16 @@ Resources:
                 Action: [sqs:GetQueueUrl, sqs:GetQueueAttributes]
                 Resource: !ImportValue
                   Fn::Sub: "${Project}-${Env}-TicketsDlqArn"
+              - Sid: CallModels         # Bedrock in Sydney (provider: bedrock); Nova via the APAC profiles
+                Effect: Allow
+                Action: bedrock:InvokeModel   # Converse is authorised as InvokeModel
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+              - Sid: CrossAccountModels   # optional: BEDROCK_ROLE_ARN in another account, roles named paynest-bedrock-*
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::*:role/paynest-bedrock-*"
               - Sid: WriteTraces        # phase D: the ADOT collector sends spans to X-Ray
                 Effect: Allow
                 Action:

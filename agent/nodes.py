@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from agent import (
     answer_library,
     conversation,
+    decision,
     drafter,
     injection,
     keywords,
@@ -312,20 +313,24 @@ def send(state, deps: Deps):
         if hasattr(deps.store, "create_review") and state.get("draft"):
             # never sent: a person sees the draft and the problems, and fixes or rejects it
             deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], reason)
-            deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **{**common, "route_reason": reason})
+            deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **{**common, "route_reason": reason},
+                                     decision=decision.record(state, "waiting_review"))
             return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
-        deps.store.save_progress(state["ticket_id"], agent_status="failed", route_reason=reason)
+        deps.store.save_progress(state["ticket_id"], agent_status="failed", route_reason=reason,
+                                 decision=decision.record(state, "failed"))
         return {"sent": False, "steps": _step(state, "send")}
     if state.get("route") == "review" and hasattr(deps.store, "create_review"):
         # a human approves before anything is sent (statutory, P1, known issue)
         deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], state.get("route_reason"))
-        deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common)
+        deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common,
+                                 decision=decision.record(state, "waiting_review"))
         return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
     tier = {"cache": "the How-To cache", "library": "approved How-To answers"}.get(state.get("draft_mode"))
     if tier:
         common["route_reason"] = f"{common.get('route_reason') or ''} (answered from {tier})".strip()
     sent_now = deps.store.insert_reply(state["ticket_id"], state["draft_version"], state["draft"], "chat")
-    deps.store.save_progress(state["ticket_id"], agent_status="replied", **common)
+    deps.store.save_progress(state["ticket_id"], agent_status="replied", **common,
+                             decision=decision.record(state, "sent"))
     _cache_answer(state, deps)
     _ask_support_to_write_it(state, deps)
     return {"sent": True, "meta": {**state.get("meta", {}), "sent_now": sent_now}, "steps": _step(state, "send")}

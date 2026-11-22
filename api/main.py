@@ -164,10 +164,109 @@ def _admin(token: str | None):
         raise HTTPException(401, "admin token required")
 
 
+def _reader(token: str | None) -> str:
+    """Phase G5: the console is read-only for the support lead (LEAD_TOKEN) and open to admins.
+    Deciding reviews and importing knowledge stay admin-only. Returns the role."""
+    import hmac
+
+    if token and settings.ADMIN_TOKEN and hmac.compare_digest(token, settings.ADMIN_TOKEN):
+        return "admin"
+    if token and settings.LEAD_TOKEN and hmac.compare_digest(token, settings.LEAD_TOKEN):
+        return "lead"
+    if not settings.ADMIN_TOKEN and not settings.LEAD_TOKEN:
+        raise HTTPException(503, "console disabled: ADMIN_TOKEN / LEAD_TOKEN not set")
+    raise HTTPException(401, "lead or admin token required")
+
+
+_model = None
+
+
+def get_model():
+    """The model client for translations (masked text only); None when no provider key is set."""
+    global _model
+    if _model is None:
+        from agent.models import ModelClient, PgLedger
+
+        client = ModelClient(ledger=PgLedger(settings.DATABASE_URL))
+        _model = client if client.key else False
+    return _model or None
+
+
+# ---------------------------------------------------------------- support-head console (phase G)
+VIEWS = ("all", "resolved", "approval", "approved", "human", "merged", "chat")
+
+
+@app.get("/console/summary")
+def console_summary(days: int = 7, x_admin_token: str | None = Header(default=None)) -> dict:
+    """What the agent resolved itself, what went to a person and why, confidence, cache and RAG use."""
+    role = _reader(x_admin_token)
+    if not 1 <= days <= 90:
+        raise HTTPException(422, "days 1-90")
+    from agent import console
+
+    store = get_store()
+    return {**console.summarize(store.console_rows(days), store.model_cost(days)), "days": days, "role": role}
+
+
+@app.get("/console/tickets")
+def console_tickets(view: str = "all", days: int = 7, language: str | None = None, team: str | None = None,
+                    x_admin_token: str | None = Header(default=None)) -> dict:
+    _reader(x_admin_token)
+    if view not in VIEWS or not 1 <= days <= 90:
+        raise HTTPException(422, f"view one of {VIEWS}; days 1-90")
+    from agent import console
+
+    rows = console.queue_rows(get_store().console_rows(days), view, language, team)
+    return {"view": view, "count": len(rows), "tickets": rows[:500]}
+
+
+@app.get("/console/tickets/{ticket_id}")
+def console_ticket(ticket_id: str, translate: bool = True, x_admin_token: str | None = Header(default=None)) -> dict:
+    """One ticket's timeline: masked question, decision record, replies, reviews, and an English
+    machine translation for Arabic/Hindi/Hinglish (made once, on first open, then stored)."""
+    _reader(x_admin_token)
+    try:
+        uuid.UUID(ticket_id)
+    except ValueError:
+        raise HTTPException(404, "ticket not found") from None
+    store = get_store()
+    t = store.console_ticket(ticket_id)
+    if t is None:
+        raise HTTPException(404, "ticket not found")
+    from agent import console
+    from agent import translate as tr
+    from agent.unmask import customer_view
+
+    if translate and not t.get("translation") and t.get("language") in tr.NEEDS:
+        t["translation"] = tr.for_ticket(t.get("masked_body") or "", [r["body"] for r in t["replies"]],
+                                         t["language"], get_model(), ticket_id)
+        if t["translation"]["question"].get("ok") or t["translation"]["reply"].get("ok"):
+            store.save_progress(ticket_id, translation=t["translation"])
+    t["bucket"] = console.bucket(t)
+    t["customer_saw"] = [customer_view(r["body"]) for r in t["replies"]]
+    return t
+
+
+class Feedback(BaseModel):
+    solved: bool
+
+
+@app.post("/tickets/{ticket_id}/feedback")
+def ticket_feedback(ticket_id: str, f: Feedback) -> dict:
+    """The customer's "did this solve it?" from the chat (G4 trust signal)."""
+    try:
+        uuid.UUID(ticket_id)
+    except ValueError:
+        raise HTTPException(404, "ticket not found") from None
+    if not get_store().set_feedback(ticket_id, "yes" if f.solved else "no"):
+        raise HTTPException(404, "ticket not found")
+    return {"ticket_id": ticket_id, "feedback": "yes" if f.solved else "no"}
+
+
 @app.get("/dashboard")
 def dashboard(scope: str = "live", days: int = 7, x_admin_token: str | None = Header(default=None)) -> dict:
-    """Operations dashboard data (admin token): classification, merges, resolution. Masked data only."""
-    _admin(x_admin_token)
+    """Operations dashboard data (lead or admin token): classification, merges, resolution. Masked data only."""
+    _reader(x_admin_token)
     if scope not in ("live", "export") or not 1 <= days <= 90:
         raise HTTPException(422, "scope must be live or export; days 1-90")
     from agent.dashboard import summarize

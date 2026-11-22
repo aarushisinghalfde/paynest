@@ -1,0 +1,54 @@
+"""Phase G API: console endpoints, lead vs admin tokens, feedback (runs where FastAPI is installed, e.g. CI)."""
+import pytest
+
+pytest.importorskip("fastapi")
+pytest.importorskip("httpx")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+import api.main as main  # noqa: E402
+from shared import settings  # noqa: E402
+from tests.test_console import _mixed  # noqa: E402
+
+client = TestClient(main.app)
+
+
+@pytest.fixture
+def console(monkeypatch):
+    store, ids = _mixed()
+    monkeypatch.setattr(main, "_store", store)
+    monkeypatch.setattr(main, "_model", False)  # no model: translations say so, never guess
+    monkeypatch.setattr(settings, "ADMIN_TOKEN", "admin-secret")
+    monkeypatch.setattr(settings, "LEAD_TOKEN", "lead-secret")
+    return store, ids
+
+
+def test_console_needs_a_lead_or_admin_token(console):
+    assert client.get("/console/summary").status_code == 401
+    assert client.get("/console/summary", headers={"X-Admin-Token": "wrong"}).status_code == 401
+    r = client.get("/console/summary", headers={"X-Admin-Token": "lead-secret"})
+    assert r.status_code == 200 and r.json()["role"] == "lead"
+    assert sum(b["n"] for b in r.json()["buckets"]) == r.json()["tickets"]
+
+
+def test_lead_can_read_but_not_decide_reviews_or_import(console):
+    lead = {"X-Admin-Token": "lead-secret"}
+    assert client.get("/review/tasks", headers=lead).status_code == 401
+    assert client.post("/knowledge", json={"articles": []}, headers=lead).status_code == 401
+
+
+def test_queues_and_ticket_timeline(console):
+    store, ids = console
+    h = {"X-Admin-Token": "lead-secret"}
+    r = client.get("/console/tickets?view=approval", headers=h).json()
+    assert r["count"] == 2 and all(t["bucket"] == "approval" for t in r["tickets"])
+    assert client.get("/console/tickets?view=nope", headers=h).status_code == 422
+    t = client.get(f"/console/tickets/{ids[1]}", headers=h).json()
+    assert t["bucket"] == "resolved" and t["decision"]["answer"]["sources"] and t["customer_saw"]
+
+
+def test_customer_feedback(console):
+    store, ids = console
+    assert client.post(f"/tickets/{ids[1]}/feedback", json={"solved": False}).json()["feedback"] == "no"
+    assert store.tickets[ids[1]]["feedback"] == "no"
+    assert client.post("/tickets/not-a-uuid/feedback", json={"solved": True}).status_code == 404

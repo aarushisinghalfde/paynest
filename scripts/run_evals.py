@@ -18,6 +18,7 @@ Writes results/evals.json. Gates:
   sent_replies_clean     0 PII / unknown tokens in anything sent
   guard_pass_rate        >= 95% of drafts pass the output guard
   dedupe_precision       >= 95% (Q3 replay)
+  faithfulness           (with --with-model) >= 90% of claims in model drafts backed by their sources
   meridian_incident      the 25 Sep burst is 1 incident, opened by ticket 5 at the latest
 """
 
@@ -31,6 +32,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+try:
+    import sklearn  # noqa: E402, F401
+    import yaml  # noqa: E402, F401
+except ModuleNotFoundError as exc:  # the laptop's Python, outside the app image
+    sys.exit(f"missing package {exc.name!r}: run  python -m pip install pyyaml python-dotenv scikit-learn  and try again")
 
 from agent import labelled_eval  # noqa: E402
 from agent.replay import gates as replay_gates  # noqa: E402
@@ -48,6 +55,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-room", type=Path, default=ROOT.parent / "paynest-support-discovery" / "data-room")
     ap.add_argument("--record", action="store_true", help="append the gates to results/gates.csv")
+    ap.add_argument("--with-model", action="store_true",
+                    help="draft with the model (OPENROUTER_API_KEY in .env, masked text only, cap USD 1) "
+                         "and judge faithfulness (C2)")
     args = ap.parse_args()
     if not args.data_room.is_dir():
         print(f"data room not found: {args.data_room} (pass --data-room)")
@@ -56,7 +66,17 @@ def main() -> int:
     t0 = time.time()
     ds = labelled_eval.build_dataset(read_data_room(args.data_room.resolve()))
     print(f"masked {len(ds.tables['tickets'])} Q3 tickets in memory ({time.time() - t0:.0f} s)")
-    ev = labelled_eval.evaluate(ds)
+    model = None
+    if args.with_model:
+        from dotenv import load_dotenv
+
+        from agent.models import ModelClient
+        load_dotenv(ROOT / ".env")
+        model = ModelClient(cap_usd=1.0)
+        if not model.key:
+            print("--with-model: no model key (OPENROUTER_API_KEY in .env); running without the model")
+            model = None
+    ev = labelled_eval.evaluate(ds, model=model)
     rp = replay(ds.tables["tickets"], ds.tables["jira_issues"])
     gates = labelled_eval.gates(ev) + replay_gates(rp)[:2]
 

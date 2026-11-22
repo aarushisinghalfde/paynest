@@ -58,6 +58,10 @@ if ($Restart) {
   Start-Sleep -Seconds 60
 }
 
+# The few packages the check scripts and the evals need on the laptop (the app's own list is
+# requirements.txt, inside the Docker image). Quick when already installed.
+python -m pip install -q --disable-pip-version-check "boto3[crt]" pyyaml python-dotenv scikit-learn *>&1 | Tee-Object -FilePath $Log -Append
+
 # 3. Wait for the app.
 Say "Waiting for health (up to 15 min)..."
 if (-not (Wait-Healthy 15)) { Say "FAIL: app never became healthy. Stopping here."; exit 1 }
@@ -65,6 +69,8 @@ if (-not (Wait-Healthy 15)) { Say "FAIL: app never became healthy. Stopping here
 # 4. ADMIN_TOKEN from .env (read only).
 $tokenLine = Get-Content ".env" -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*ADMIN_TOKEN\s*=' } | Select-Object -First 1
 if ($tokenLine) { $env:ADMIN_TOKEN = ($tokenLine -split '=', 2)[1].Trim().Trim('"') } else { Say "WARN: ADMIN_TOKEN not found in .env" }
+$leadLine = Get-Content ".env" -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*LEAD_TOKEN\s*=' } | Select-Object -First 1
+if ($leadLine) { $env:LEAD_TOKEN = ($leadLine -split '=', 2)[1].Trim().Trim('"') }
 
 # 5. All live gates.
 $summary = @()

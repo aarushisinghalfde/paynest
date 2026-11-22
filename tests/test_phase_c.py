@@ -55,3 +55,41 @@ def test_eval_gates_pass_on_a_clean_run():
     rows = [_row(ref=f"PN-{i}") for i in range(10)] + [_row(ref="PN-S", gold="Statutory", pred="Statutory",
                                                              route="review", sent=False, tier="fallback")]
     assert all(ok for _, ok, _ in labelled_eval.gates(labelled_eval.summarize(rows)))
+
+
+# ---- C2 faithfulness --------------------------------------------------------------------------
+from agent import faithfulness  # noqa: E402
+from agent.models import Result  # noqa: E402
+
+
+class Judge:
+    def __init__(self, claims):
+        self.claims = claims
+
+    def json_call(self, system, user, **kw):
+        self.user = user
+        return Result({"claims": self.claims}, "judge", 1, 1, 1, 0.0, 1.0)
+
+
+SRC = {"hits": [{"chunk_id": "R-IN-PF-2026-08#rule", "title": "PF ceiling", "content": "INR 25,000 per month from 2026-08-01"}],
+       "facts": []}
+
+
+def test_a_claim_counts_only_with_a_source_the_drafter_actually_had():
+    j = Judge([{"claim": "The ceiling is INR 25,000", "supported": True, "source": "R-IN-PF-2026-08#rule"},
+               {"claim": "It applies to contractors", "supported": True, "source": None},
+               {"claim": "It was 15,000 before", "supported": True, "source": "KB-9999#x"}])
+    r = faithfulness.judge("draft", SRC, j)
+    assert r["claims"] == 3 and r["supported"] == 1 and len(r["unsupported"]) == 2
+    assert "R-IN-PF-2026-08#rule" in j.user  # the judge sees exactly the drafter's sources
+    s = faithfulness.summarize([r, None])
+    assert s["drafts_judged"] == 1 and s["score"] == round(1 / 3, 3)
+
+
+def test_faithfulness_gate_appears_only_when_judged():
+    ev = {"classification": {"accuracy": 1, "macro_f1": 1, "customer_pick": 0.9, "by_language": {"en": 1}},
+          "statutory": {"n": 0, "answered_without_a_person": []}, "sent_dirty": [],
+          "guard": {"drafts": 1, "passed": 1, "problems": {}}, "faithfulness": None}
+    assert "faithfulness" not in [n for n, _, _ in labelled_eval.gates(ev)]
+    ev["faithfulness"] = {"drafts_judged": 10, "claims": 20, "supported": 19, "score": 0.95, "examples_unsupported": []}
+    assert dict((n, ok) for n, ok, _ in labelled_eval.gates(ev))["faithfulness"]

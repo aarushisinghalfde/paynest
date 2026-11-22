@@ -1,7 +1,12 @@
 """One model client for every job (classify, draft, judge), reading config/models.yaml.
 
-Provider is OpenRouter while Bedrock is on hold; switching is the `provider` line. Every
-call: only masked text, a JSON response, tokens and cost written to the cost ledger, and the
+Two providers behind one json_call:
+  openrouter  HTTPS + API key (the stand-in while this account's Bedrock is on hold)
+  bedrock     the Converse API in ap-southeast-2 with the server's IAM role (no key). Optionally the
+              calls run in another account through a cross-account role (BEDROCK_ROLE_ARN), so the
+              app can stay here while that account's Bedrock does the model work, in Sydney.
+Switching is `provider: bedrock` in config/models.yaml plus the IAM permission (infra/cfn/iam.yaml).
+Every call: only masked text, a JSON response, tokens and cost written to the cost ledger, and the
 daily cap enforced BEFORE the call (above it, callers fall back to route-to-queue).
 """
 
@@ -104,7 +109,16 @@ class ModelClient:
         p = cfg["providers"][self.provider]
         self.ladder = p["ladder"]
         self.base_url = p.get("base_url")
-        self.key = api_key if api_key is not None else os.environ.get(p.get("api_key_env", ""), "")
+        self.prices = p.get("prices") or {}
+        self.region = p.get("region")
+        self.role_arn = os.environ.get("BEDROCK_ROLE_ARN", "") if self.provider == "bedrock" else ""
+        if self.provider == "bedrock":
+            # no key: the instance (or cross-account) role signs each call; "iam" marks the client usable
+            self.key = "iam" if self.ladder else ""
+            if transport is _post:
+                transport = _converse_transport(self.region, self.role_arn)
+        else:
+            self.key = api_key if api_key is not None else os.environ.get(p.get("api_key_env", ""), "")
         self.cap = cfg["budget"]["daily_usd_cap"] if cap_usd is None else cap_usd
         self.ledger = ledger or MemoryLedger()
         self.transport = transport
@@ -124,6 +138,8 @@ class ModelClient:
         if not self.key:
             raise ModelError("no API key for the model provider")
         model = self.ladder[min(rung, len(self.ladder) - 1)]
+        if self.provider == "bedrock":
+            return self._bedrock(model, rung, system, user, purpose, ticket_id, route, max_tokens)
         payload = {
             "model": model,
             "temperature": 0,
@@ -158,3 +174,53 @@ class ModelClient:
         return Result(
             data, model, rung, usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0, cost, ms
         )
+
+    def _bedrock(self, model, rung, system, user, purpose, ticket_id, route, max_tokens) -> Result:
+        t0 = time.perf_counter()
+        try:
+            out = self.transport(model=model, system=system, user=user, max_tokens=max_tokens)
+        except Exception as exc:  # noqa: BLE001 - throttling, access, network: the caller falls back
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code", type(exc).__name__)
+            raise ModelError(f"bedrock call failed: {code}") from None
+        ms = (time.perf_counter() - t0) * 1000
+        usage = out.get("usage") or {}
+        tin, tout = int(usage.get("inputTokens") or 0), int(usage.get("outputTokens") or 0)
+        price = self.prices.get(model) or {}
+        cost = tin / 1000 * float(price.get("in", 0)) + tout / 1000 * float(price.get("out", 0))
+        self.ledger.record(ticket_id=ticket_id, purpose=purpose, route=route, model_id=model, rung=rung,
+                           tokens_in=tin, tokens_out=tout, cost_usd=cost)
+        try:
+            text = "".join(c.get("text", "") for c in out["output"]["message"]["content"])
+            data = json.loads(text[text.find("{") : text.rfind("}") + 1])
+        except (KeyError, ValueError) as exc:
+            raise ModelError("response was not JSON") from exc
+        return Result(data, model, rung, tin, tout, cost, ms)
+
+
+def _converse_transport(region: str, role_arn: str = ""):
+    """bedrock-runtime Converse, signed by the instance role, or by a cross-account role (refreshed hourly)."""
+    import boto3
+
+    state = {"client": None, "expires": 0.0}
+
+    def client():
+        if state["client"] is not None and time.time() < state["expires"]:
+            return state["client"]
+        if role_arn:
+            creds = boto3.client("sts", region_name=region).assume_role(
+                RoleArn=role_arn, RoleSessionName="paynest-models", DurationSeconds=3600)["Credentials"]
+            state["client"] = boto3.client("bedrock-runtime", region_name=region,
+                                           aws_access_key_id=creds["AccessKeyId"],
+                                           aws_secret_access_key=creds["SecretAccessKey"],
+                                           aws_session_token=creds["SessionToken"])
+            state["expires"] = time.time() + 3000
+        else:
+            state["client"], state["expires"] = boto3.client("bedrock-runtime", region_name=region), float("inf")
+        return state["client"]
+
+    def call(model, system, user, max_tokens):
+        return client().converse(modelId=model, system=[{"text": system}],
+                                 messages=[{"role": "user", "content": [{"text": user}]}],
+                                 inferenceConfig={"maxTokens": max_tokens, "temperature": 0})
+
+    return call
