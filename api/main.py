@@ -9,6 +9,7 @@ Chat and review WebSockets arrive in phases 5 and 10.
 
 import json
 import logging
+import os
 import re
 import uuid
 
@@ -70,7 +71,8 @@ def get_queue():
 @app.get("/health")
 def health() -> dict:
     """Liveness: the process is up. Never touches other services."""
-    return {"status": "ok", "region": settings.REGION, "aws_region": settings.AWS_REGION}
+    return {"status": "ok", "region": settings.REGION, "aws_region": settings.AWS_REGION,
+            "version": os.environ.get("APP_VERSION", "dev")}
 
 
 @app.get("/ready")

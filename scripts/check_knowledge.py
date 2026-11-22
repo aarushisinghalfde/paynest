@@ -70,6 +70,8 @@ def ask(question):
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):  # Windows consoles are cp1252: Arabic/Hindi replies crashed print()
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     token = os.environ.get("ADMIN_TOKEN", "")
     if not token:
         print('Set the token first:  $env:ADMIN_TOKEN = "<ADMIN_TOKEN value from .env>"')

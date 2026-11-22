@@ -67,6 +67,8 @@ def run_case(base, tenant, text):
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):  # Windows consoles are cp1252: Arabic/Hindi replies crashed print()
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=URL)
     args = ap.parse_args()

@@ -25,6 +25,9 @@ log = logging.getLogger("answer_cache")
 TTL_SECONDS = 7 * 24 * 3600
 MAX_ENTRIES = 500
 WORDS_MIN, GRAMS_MIN = 0.6, 0.75
+# Bump when the How-To reply rules change, so answers written under the old rules are not served again.
+# 2: replies must name their guide in words (v0.7.1 cached "using [KB-0105#title] guide" -> "using guide").
+ANSWER_FORMAT = 2
 
 
 def _jaccard(a: set, b: set) -> float:
@@ -37,7 +40,7 @@ def similarity(q1: str, q2: str) -> float:
 
 
 def _bucket(kb_version: str, region: str | None, language: str) -> str:
-    return f"howto:{kb_version}:{region or 'ALL'}:{language}"
+    return f"howto:f{ANSWER_FORMAT}:{kb_version}:{region or 'ALL'}:{language}"
 
 
 def _field(question: str) -> str:

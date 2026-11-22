@@ -67,6 +67,8 @@ jobs:
           context: ${{ matrix.context }}
           platforms: linux/arm64
           push: true
+          build-args: |
+            APP_VERSION=${{ env.VERSION }}
           tags: |
             ${{ steps.ecr.outputs.registry }}/paynest-demo/${{ matrix.image }}:${{ env.VERSION }}
             ${{ steps.ecr.outputs.registry }}/paynest-demo/${{ matrix.image }}:latest

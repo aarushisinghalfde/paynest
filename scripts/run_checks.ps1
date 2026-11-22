@@ -24,7 +24,13 @@ function Wait-Healthy([int]$Minutes) {
   while ((Get-Date) -lt $deadline) {
     try {
       $r = Invoke-WebRequest -Uri $Health -UseBasicParsing -TimeoutSec 10
-      if ($r.StatusCode -eq 200 -and $r.Content.TrimStart().StartsWith("{")) { Say "Health OK: $($r.Content)"; return $true }
+      if ($r.StatusCode -eq 200 -and $r.Content.TrimStart().StartsWith("{")) {
+        Say "Health OK: $($r.Content)"
+        $running = ($r.Content | ConvertFrom-Json).version
+        $tag = (git describe --tags --abbrev=0 2>$null)
+        if ($tag -and $running -ne $tag) { Say "WARN: server runs '$running' but your latest tag is '$tag'. Is the Images run for $tag green? If so, run again with -Restart." }
+        return $true
+      }
     } catch { }
     Start-Sleep -Seconds 20
   }
@@ -35,6 +41,7 @@ function Wait-Healthy([int]$Minutes) {
 Say "Starting the demo (RDS then EC2) if stopped..."
 & "$PSScriptRoot\demo.ps1" start *>&1 | Tee-Object -FilePath $Log -Append
 $env:AWS_PROFILE = $AwsProfile
+$env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"   # Arabic/Hindi replies print on a cp1252 console
 
 # 2. Optional restart so the server pulls the newest image.
 if ($Restart) {

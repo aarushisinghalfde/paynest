@@ -6,3 +6,5 @@ ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app PIP_NO_CACHE_DIR=1
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
