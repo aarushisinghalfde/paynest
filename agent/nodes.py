@@ -128,6 +128,13 @@ def classify(state, deps: Deps):
         c = {**c, "second": c.get("team") if c.get("team") != "How-To" else c.get("second"), "team": "How-To",
              "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.6),
              "source": f"{c.get('source', 'keywords')}+howto_phrase"}
+    # "Status of payroll run PR-202609?" is a lookup in the payroll API, not a judgement call: when the
+    # classifier is unsure (live check: Payroll vs Statutory too close -> queue), it is Payroll.
+    if (c.get("branch") != "auto" and conversation.is_run_status(text)
+            and not c.get("priority_signal") and not c.get("is_injection")):
+        c = {**c, "second": c.get("team") if c.get("team") != "Payroll" else c.get("second"), "team": "Payroll",
+             "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.6),
+             "source": f"{c.get('source', 'keywords')}+run_status"}
     if state.get("talk") in ("greeting", "thanks", "status"):  # not a support topic: no team
         c = {**c, "team": None, "branch": "chat", "source": "conversation"}
     return {
@@ -244,8 +251,9 @@ def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
         return {"sources": sources, **_template(state, "ack")}
     # 5. no source had real steps: ask support to write the answer once (learning loop, in send)
     learn = [a["kb_id"] or a["chunk_id"].split("#")[0] for a in articles[:1] if not a.get("has_steps")]
+    fb = drafter.draft_howto(state, articles, model=None) if d["mode"] == "model" else None
     return {"draft": d["reply"], "draft_mode": d["mode"], "citations": d["citations"], "sources": sources,
-            "learn_kb": learn}
+            "learn_kb": learn, "fallback_draft": fb}
 
 
 def _template(state, kind) -> dict:
@@ -256,10 +264,23 @@ def _template(state, kind) -> dict:
 
 
 def output_guard(state, deps: Deps):
+    result = _guard(state, state.get("draft"))
+    fb = state.get("fallback_draft")
+    if not result.get("ok") and fb and fb.get("reply"):
+        # How-To: the model's wording failed a check. The no-model draft uses the same sources and fixed
+        # wording; if it passes, the customer gets that instead of waiting for a person.
+        alt = _guard(state, fb["reply"])
+        if alt.get("ok"):
+            return {"guard": {**alt, "replaced": result.get("problems")}, "draft": fb["reply"],
+                    "draft_mode": "fallback", "citations": fb["citations"], "steps": _step(state, "output_guard")}
+    return {"guard": result, "steps": _step(state, "output_guard")}
+
+
+def _guard(state, draft):
     src = state.get("sources") or {}
     as_of = src.get("as_of")
-    result = out_guard.check(
-        state.get("draft"),
+    return out_guard.check(
+        draft,
         ticket_text=f"{state.get('subject', '')} {state.get('body', '')}",
         region=(state.get("tenant") or {}).get("region"),
         language=state.get("language", "en"),
@@ -268,7 +289,6 @@ def output_guard(state, deps: Deps):
         as_of=retrieval._as_date(as_of) if as_of else None,
         ref=state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8],
     )
-    return {"guard": result, "steps": _step(state, "output_guard")}
 
 
 def send(state, deps: Deps):

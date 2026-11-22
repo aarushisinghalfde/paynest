@@ -63,6 +63,15 @@ QUESTION_START = re.compile(
     r"|क्या|कैसे|कब|कहाँ|क्यों|ما|ماذا|كيف|متى|هل|أين|لماذا)\b", re.I)
 
 
+RUN_STATUS = re.compile(r"\b(status|progress|stuck|update|where is|kahan hai|kya hua)\b|حالة|स्थिति", re.I)
+
+
+def is_run_status(text: str) -> bool:
+    """Asks where a specific payroll run is ("What is the status of payroll run PR-202609?")."""
+    from agent.tools import RUN_ID_RE
+    return bool(RUN_ID_RE.search(text or "")) and bool(RUN_STATUS.search(text or ""))
+
+
 def is_new_question(text: str) -> bool:
     """A self-contained question ("What is the status of run PR-1?"), not an answer to ours."""
     return bool(QUESTION_START.match(text or "")) and len(_clean(text).split()) >= 4

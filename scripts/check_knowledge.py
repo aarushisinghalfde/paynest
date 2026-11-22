@@ -89,7 +89,9 @@ def main() -> int:
         if attempt:
             time.sleep(35)
         reply = ask("How do I export the audit trail?")
-        if STEP in reply:
+        # The fixed-wording reply quotes the step; a model reply paraphrases it ("Reports > Audit trail
+        # and selecting Export") but always names the guide it used, so either proves the import is live.
+        if STEP in reply or "KB-GATE-1" in reply:
             ok = True
             break
     results.append(("knowledge_used_by_agent", ok and "example.com" not in reply, f"reply: {reply[:160]!r}"))

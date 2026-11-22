@@ -84,7 +84,8 @@ def main() -> int:
             if route not in routes:
                 raise AssertionError(f"route {route} ({t.get('route_reason')}), expected {sorted(routes)}")
             if must and must not in reply:
-                raise AssertionError(f"reply lacks {must!r}: {reply[:160]!r}")
+                raise AssertionError(f"reply lacks {must!r} [{t.get('agent_status')} · {t.get('answer_tier')} · "
+                                     f"{(t.get('route_reason') or '')[:70]}]: {reply[:120]!r}")
             detail, ok = f"route {route} · {t.get('agent_status')} · {reply[:110]!r}", True
         except Exception as exc:  # noqa: BLE001
             detail, ok = f"{exc}"[:220], False
