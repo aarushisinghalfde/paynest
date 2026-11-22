@@ -4,11 +4,13 @@
   Usage (from the repo root):
     .\scripts\run_checks.ps1            # start EC2 + RDS if stopped, wait for health, run all checks
     .\scripts\run_checks.ps1 -Restart   # also restart the app first (pulls the newest :latest image)
+    .\scripts\run_checks.ps1 -Restart -ExpectVersion v0.8.0   # wait until the server reports that version
+                                                              (scripts\deploy.ps1 calls it this way)
 
   It reads ADMIN_TOKEN from .env (never writes it) and writes checks_<date-time>.log in the repo root.
   Paste that log back to Claude.
 #>
-param([switch]$Restart)
+param([switch]$Restart, [string]$ExpectVersion = "")
 
 $ErrorActionPreference = "Continue"
 $AwsProfile = "payce-fde"
@@ -25,10 +27,15 @@ function Wait-Healthy([int]$Minutes) {
     try {
       $r = Invoke-WebRequest -Uri $Health -UseBasicParsing -TimeoutSec 10
       if ($r.StatusCode -eq 200 -and $r.Content.TrimStart().StartsWith("{")) {
-        Say "Health OK: $($r.Content)"
         $running = ($r.Content | ConvertFrom-Json).version
+        if ($ExpectVersion -and $running -ne $ExpectVersion) {
+          Say "Server is up but runs '$running'; waiting for $ExpectVersion ..."
+          Start-Sleep -Seconds 20
+          continue
+        }
+        Say "Health OK: $($r.Content)"
         $tag = (git describe --tags --abbrev=0 2>$null)
-        if ($tag -and $running -ne $tag) { Say "WARN: server runs '$running' but your latest tag is '$tag'. Is the Images run for $tag green? If so, run again with -Restart." }
+        if (-not $ExpectVersion -and $tag -and $running -ne $tag) { Say "WARN: server runs '$running' but your latest tag is '$tag'. Is the Images run for $tag green? If so, run again with -Restart." }
         return $true
       }
     } catch { }
@@ -60,9 +67,20 @@ $tokenLine = Get-Content ".env" -ErrorAction SilentlyContinue | Where-Object { $
 if ($tokenLine) { $env:ADMIN_TOKEN = ($tokenLine -split '=', 2)[1].Trim().Trim('"') } else { Say "WARN: ADMIN_TOKEN not found in .env" }
 
 # 5. All live gates.
-foreach ($check in "check_phase4.py", "check_chat.py", "check_dashboard.py", "check_knowledge.py") {
+$summary = @()
+foreach ($check in "check_phase4.py", "check_chat.py", "check_dashboard.py", "check_knowledge.py", "check_agent_live.py") {
   Say "=== $check ==="
   python "scripts\$check" *>&1 | Tee-Object -FilePath $Log -Append
   Say "exit code $LASTEXITCODE"
+  $summary += "{0,-22} {1}" -f $check, $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
 }
+
+# 6. Phase C evals: local, on your copy of the data room (no AWS, no model).
+Say "=== run_evals.py (local) ==="
+python "scripts\run_evals.py" --record *>&1 | Tee-Object -FilePath $Log -Append
+$summary += "{0,-22} {1}" -f "run_evals.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
+Say "Summary:"
+$summary | ForEach-Object { Say "  $_" }
 Say "Done. Log: $Log"
+if ($summary | Where-Object { $_ -match "FAIL$" }) { exit 1 }
+exit 0

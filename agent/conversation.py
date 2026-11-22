@@ -72,6 +72,18 @@ def is_run_status(text: str) -> bool:
     return bool(RUN_ID_RE.search(text or "")) and bool(RUN_STATUS.search(text or ""))
 
 
+FIGURE_ASK = re.compile(
+    r"\b(rate|ceiling|limit|slab|threshold|percentage|how much|calculat\w*|kitn[aie]|kitna)\b|कितन[ाीे]|गणना|सीमा"
+    r"|احتساب|حساب|كم\b|نسبة|الحد", re.I)
+
+
+def asks_statutory_figure(text: str) -> bool:
+    """Asks for a statutory rate, limit or calculation (PF ceiling, gratuity, TDS slab, WPS format) in any
+    language. Those answers always get a person's approval, whatever team the words resemble."""
+    from agent.tools import RATE_TRIGGERS
+    return any(rx.search(text or "") for rx, _, _ in RATE_TRIGGERS) and bool(FIGURE_ASK.search(text or ""))
+
+
 def is_new_question(text: str) -> bool:
     """A self-contained question ("What is the status of run PR-1?"), not an answer to ours."""
     return bool(QUESTION_START.match(text or "")) and len(_clean(text).split()) >= 4

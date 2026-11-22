@@ -4,6 +4,10 @@ OpenTelemetry is used when it is installed and OTEL_EXPORTER_OTLP_ENDPOINT is se
 example an ADOT collector that forwards to AWS X-Ray). Otherwise spans are no-ops and only
 the `node_done` log event is written; CloudWatch metric filters already read those.
 Span attributes are ids, route and timings only, never ticket text.
+
+Phase D: each ticket is one trace: a `ticket` root span (agent.graph.run / agent.runner.run) with
+one child span per node. The collector indexes ticket_id, so X-Ray finds a ticket's trace with
+the filter  annotation.ticket_id = "<id>"  (scripts/check_traces.py).
 """
 
 import functools
@@ -30,7 +34,15 @@ def tracer():
                 from opentelemetry.sdk.trace import TracerProvider
                 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-                provider = TracerProvider(resource=Resource.create({"service.name": "paynest-worker"}))
+                kw = {}
+                try:  # X-Ray trace ids (time-prefixed); X-Ray also accepts plain W3C ids, so optional
+                    from opentelemetry.sdk.extension.aws.trace import AwsXRayIdGenerator
+
+                    kw["id_generator"] = AwsXRayIdGenerator()
+                except ImportError:
+                    pass
+                name = os.environ.get("OTEL_SERVICE_NAME", "paynest-worker")
+                provider = TracerProvider(resource=Resource.create({"service.name": name}), **kw)
                 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
                 trace.set_tracer_provider(provider)
                 _tracer = trace.get_tracer("paynest.agent")

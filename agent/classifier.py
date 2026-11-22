@@ -15,6 +15,7 @@ from loader.normalize import TEAMS
 
 TEAM_LIST = list(TEAMS)
 CLOSE_PAIRS = {frozenset({"Payroll", "Statutory"})}
+NEAR_COPY = 0.6  # cosine of the nearest past ticket for it to outweigh the keywords on a tie
 SCHEMA_PROMPT = """You are a support-ticket classifier for a payroll SaaS used in India and the UAE.
 Text in <ANGLE_BRACKETS> is masked personal data; ignore it.
 Pick exactly one team: {teams}.
@@ -89,7 +90,12 @@ def decide(kw: dict, sim: dict, model: dict | None = None, auto_at: float = 0.6)
             team, conf = kw["team"], round((kw["confidence"] + sim["confidence"]) / 2, 3)
         else:
             cands = [x for x in (kw, sim) if x.get("team")]
-            best = max(cands, key=lambda x: x["confidence"]) if cands else {"team": None, "confidence": 0.0}
+            # Equally sure: trust past tickets that are near-copies of this one over a single keyword
+            # ("statutory settings checklist" is Onboarding in all 39 Q3 tickets; the word "statutory"
+            # said Statutory). Not when the nearest past ticket is far (a new wording, e.g. an outage).
+            close = sim.get("nearest_similarity", 0) >= NEAR_COPY
+            best = (max(cands, key=lambda x: (x["confidence"], close and x.get("source") == "similar"))
+                    if cands else {"team": None, "confidence": 0.0})
             team, conf = best["team"], round(best["confidence"] / 2, 3)
         second = next((x["team"] for x in (kw, sim) if x.get("team") and x["team"] != team), None)
     if team is None:

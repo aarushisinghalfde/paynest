@@ -125,6 +125,11 @@ Two ways to look at Paynest:
    `--profile local-queue`) instead of Amazon SQS. A step-by-step no-AWS walkthrough will be
    verified and added here before handover.
 
+## Release and operate
+
+One-command release and every gate: `.\scripts\deploy.ps1 v0.8.0`. Traces, the Valkey cache
+switch and the gate list: [docs/operate.md](docs/operate.md).
+
 ## Run it
 
 Needs Docker Desktop, Python 3.12, AWS CLI 2.32+ and a free Upstash Redis database.

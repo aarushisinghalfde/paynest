@@ -14,3 +14,16 @@
 | **F. Handover** | Update architecture, PRD status, deck results slide, runbook; decision log | Someone else can run it | Docs reviewed; all gates green |
 
 **Not doing:** India/UAE deployment, write actions on the payroll engine, training models on ticket data.
+
+## Status (22 Nov 2026)
+
+| Phase | Status |
+|---|---|
+| A. Dashboard | Live gate PASS (v0.7.3) |
+| B. Knowledge import | Live gate PASS (v0.7.3) |
+| C. Evals + phase 7 gaps | Local gates PASS: classify 100% on the labelled set (99.2% time split), statutory 0 auto, guard 200/200, dedupe 100%, Meridian 1 incident. Live gates for 6/7/9 in `check_agent_live.py` (run with the next release) |
+| D. Operate | Built: `deploy.ps1`, X-Ray traces (collector + IAM, needs `cfn.ps1` apply of iam and ec2), Valkey switch (`use_cache.ps1`, needs the cache stack). Gates: release run, `check_traces.py`, `use_cache.ps1 valkey` |
+| E. AgentCore | Not started |
+| F. Handover | Not started |
+
+Details: [operate.md](operate.md).

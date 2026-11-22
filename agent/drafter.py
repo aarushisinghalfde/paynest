@@ -60,6 +60,30 @@ GUIDE = {
 }
 
 
+MONTHS = {
+    "hi": ["", "जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"],
+    "ar": ["", "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر",
+           "ديسمبر"],
+}
+# Fixed wording for facts, per language (eval: Arabic WPS questions got English drafts -> wrong_language).
+FACT_WORDS = {
+    "en": {"intro": "Thanks for contacting Payce Support about ticket {ref}.",
+           "rate": "For {when}, {title}: {value} [{src}].", "changes": "This changes on {d}.",
+           "since": "In force since {d}.", "run": "Payroll run {run} is {status} [{src}].",
+           "more": "More detail: {title} [{src}].", "close": "Reply here if anything does not match what you see."},
+    "hi": {"intro": "Payce सपोर्ट से संपर्क करने के लिए धन्यवाद, आपका टिकट {ref} है।",
+           "rate": "{when} के लिए लागू नियम: {title} — {value} [{src}]।", "changes": "यह {d} से बदलता है।",
+           "since": "यह {d} से लागू है।", "run": "पेरोल रन {run} की स्थिति: {status} [{src}]।",
+           "more": "अधिक जानकारी के लिए गाइड देखें: {title} [{src}]।",
+           "close": "अगर आपकी स्क्रीन पर कुछ अलग दिख रहा है तो यहीं बताइए।"},
+    "ar": {"intro": "شكرًا لتواصلك مع دعم Payce بخصوص التذكرة {ref}.",
+           "rate": "القاعدة المطبقة في {when}: {title} — {value} [{src}].", "changes": "يتغير ذلك في {d}.",
+           "since": "ساري المفعول منذ {d}.", "run": "حالة دورة الرواتب {run}: {status} [{src}].",
+           "more": "لمزيد من التفاصيل راجع الدليل: {title} [{src}].",
+           "close": "إذا كان ما تراه مختلفًا عن ذلك، أخبرنا هنا وسنتابع معك."},
+}
+
+
 def fallback(hits: list[dict], facts: list[dict], as_of: date, ref: str, lang: str = "en") -> dict | None:
     rates = [f for f in facts if f["tool"] == "get_rate"]
     runs = [f for f in facts if f["tool"] == "get_run_status" and not f.get("error")]
@@ -71,23 +95,24 @@ def fallback(hits: list[dict], facts: list[dict], as_of: date, ref: str, lang: s
         title = (guide.get("title") or "").strip()
         reply = GUIDE.get(lang, GUIDE["en"]).format(title=title, kb=kb, cite=guide["chunk_id"], ref=ref)
         return {"reply": reply, "citations": [guide["chunk_id"]], "answerable": True, "mode": "fallback"}
-    parts, cites = [f"Thanks for contacting Payce Support about ticket {ref}."], []
+    w = FACT_WORDS.get(lang, FACT_WORDS["en"])
+    parts, cites = [w["intro"].format(ref=ref)], []
     for r in rates:
-        when = f"{MONTH[as_of.month]} {as_of.year}"
-        s = f"For {when}, {r['title']}: {r['value']} [{r['source']}]."
+        when = f"{MONTHS.get(lang, MONTH)[as_of.month]} {as_of.year}"
+        s = w["rate"].format(when=when, title=r["title"], value=r["value"], src=r["source"])
         if r.get("changes_on"):
-            s += f" This changes on {r['changes_on']}."
+            s += " " + w["changes"].format(d=r["changes_on"])
         elif r.get("in_force_since"):
-            s += f" In force since {r['in_force_since']}."
+            s += " " + w["since"].format(d=r["in_force_since"])
         parts.append(s)
         cites.append(r["source"])
     for r in runs:
-        parts.append(f"Payroll run {r['run_id']} is {r.get('status') or 'in progress'} [{r['source']}].")
+        parts.append(w["run"].format(run=r["run_id"], status=r.get("status") or "in progress", src=r["source"]))
         cites.append(r["source"])
     if guide and guide["chunk_id"] not in cites:
-        parts.append(f"More detail: {guide.get('title') or guide['chunk_id']} [{guide['chunk_id']}].")
+        parts.append(w["more"].format(title=guide.get("title") or guide["chunk_id"], src=guide["chunk_id"]))
         cites.append(guide["chunk_id"])
-    parts.append("Reply here if anything does not match what you see.")
+    parts.append(w["close"])
     return {"reply": " ".join(parts), "citations": cites, "answerable": bool(rates or runs), "mode": "fallback"}
 
 

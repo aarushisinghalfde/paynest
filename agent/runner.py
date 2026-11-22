@@ -7,6 +7,7 @@ node, not from the start. agent.graph does the same with LangGraph + PostgresSav
 
 from agent.nodes import NODE_FUNCS, Deps
 from agent.state import NODES
+from shared.tracing import span
 
 
 class MemoryCheckpoints:
@@ -21,6 +22,11 @@ class MemoryCheckpoints:
 
 
 def run(ticket_id: str, deps: Deps, checkpoints: MemoryCheckpoints, nodes=None) -> dict:
+    with span("ticket", ticket_id=ticket_id):  # one trace per ticket; the nodes are its children
+        return _run(ticket_id, deps, checkpoints, nodes)
+
+
+def _run(ticket_id, deps, checkpoints, nodes):
     order = nodes or NODES
     cp = checkpoints.get(ticket_id)
     state = dict(cp["state"]) if cp else {"ticket_id": ticket_id, "steps": []}

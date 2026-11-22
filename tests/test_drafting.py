@@ -275,9 +275,12 @@ def test_follow_up_is_read_with_the_earlier_turn():
 
 def test_how_to_reply_never_quotes_a_statutory_figure():
     store = MemoryAgentStore(TENANTS)
-    _, st = _chat(store, _deps(store), "How do I see the PF wage ceiling for September 2026?")
-    assert st["team"] == "How-To" and st["route"] == "reply"
+    _, st = _chat(store, _deps(store), "How do I download the payslips for September 2026?")
+    assert st["route"] == "reply"
     assert "25,000" not in (st.get("draft") or "") and not any(f["tool"] == "get_rate" for f in st["sources"]["facts"])
+    # asking for the figure itself, even worded as a how-to, goes to Statutory and a person (phase C eval)
+    _, st = _chat(store, _deps(store), "How do I see the PF wage ceiling for September 2026?", cid="conv-5678")
+    assert st["team"] == "Statutory" and st["route"] == "review" and not st.get("sent")
 
 
 def test_is_howto():

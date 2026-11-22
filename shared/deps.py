@@ -27,7 +27,19 @@ def check_redis() -> str:
         raise RuntimeError("REDIS_URL is not set: add your Upstash URL to .env")
     client = redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
     client.ping()
-    return "ping ok"
+    return f"ping ok ({redis_kind(settings.REDIS_URL)})"
+
+
+def redis_kind(url: str) -> str:
+    """Which cache is in use, without revealing the host or the token (shown on /ready)."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if host.endswith(".cache.amazonaws.com"):
+        return "ElastiCache Valkey"
+    if host.endswith(".upstash.io"):
+        return "Upstash"
+    return "Redis"
 
 
 def check_queue() -> str:

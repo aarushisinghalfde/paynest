@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from agent.similarity import EXPLICIT_REF, RESUBMIT_MARKER, containment, jaccard, shingles, words
+from agent.similarity import EXPLICIT_REF, RESUBMIT_MARKER, containment, jaccard, same_issue, shingles, words
 
 DUP_WINDOW = timedelta(hours=72)
 DUP_THRESHOLD = 0.8          # near-identical, AND the customer says it is a repeat
@@ -59,14 +59,16 @@ def find_incident(text: str, created_at, recent: list[Recent], open_incidents: l
     """{'incident_id', 'opened': bool, 'members': [ids]} or {} when no burst."""
     sh = shingles(text)
     for inc in open_incidents:
-        if jaccard(sh, shingles(inc["signature"])) >= INCIDENT_THRESHOLD and created_at - inc["opened_at"] <= timedelta(hours=24):
+        if (same_issue(text, sh, inc["signature"], shingles(inc["signature"])) >= INCIDENT_THRESHOLD
+                and created_at - inc["opened_at"] <= timedelta(hours=24)):
             return {"incident_id": inc["id"], "opened": False, "members": []}
     # similar to a ticket already in an incident (other wording, other language): attach to it
     for r in recent:
-        if r.incident_id and r.created_at and created_at - r.created_at <= timedelta(hours=24) and jaccard(sh, r.sh) >= INCIDENT_THRESHOLD:
+        if (r.incident_id and r.created_at and created_at - r.created_at <= timedelta(hours=24)
+                and same_issue(text, sh, r.text, r.sh) >= INCIDENT_THRESHOLD):
             return {"incident_id": r.incident_id, "opened": False, "members": []}
     similar = [r for r in recent if r.created_at and created_at - r.created_at <= INCIDENT_WINDOW
-               and not r.duplicate_of and jaccard(sh, r.sh) >= INCIDENT_THRESHOLD]
+               and not r.duplicate_of and same_issue(text, sh, r.text, r.sh) >= INCIDENT_THRESHOLD]
     if len(similar) + 1 >= INCIDENT_SIZE:
         return {"incident_id": str(uuid.uuid4()), "opened": True, "members": [r.id for r in similar],
                 "signature": text}

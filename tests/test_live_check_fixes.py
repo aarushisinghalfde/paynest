@@ -70,3 +70,32 @@ def test_unsure_statutory_question_without_a_run_id_still_goes_to_the_pod():
     out = classify({"ticket_id": "t" * 32, "subject": "", "body": "Is PT deducted before or after the run?"},
                    Deps(None, None, b"k", classifier=Unsure()))
     assert out["classification"]["branch"] == "clarify"
+
+
+def test_run_status_reply_without_an_inline_citation_is_sent_not_parked():
+    # live v0.7.3: route reply, waiting_review, empty reply. The model put the citation only in the JSON list;
+    # the run id is the customer's own number, so it is not an uncited claim.
+    from agent import guard
+    facts = [{"tool": "get_run_status", "source": "payroll-api:PR-202609", "run_id": "PR-202609",
+              "status": "processing", "stage": "approval_pending"}]
+    q = "What is the status of payroll run PR-202609?"
+    ok = guard.check("Payroll run PR-202609 is processing, awaiting approval.", ticket_text=q, region="IN",
+                     language="en", facts=facts, ref="x")
+    assert ok["ok"], ok
+    bad = guard.check("The PF ceiling is INR 25,000 per month.", ticket_text="PF ceiling?", region="IN",
+                      language="en", ref="x")
+    assert "uncited_answer" in bad["problems"]  # a figure the customer did not give still needs a source
+
+
+def test_auto_reply_model_draft_failing_the_guard_falls_back_to_the_fixed_wording(monkeypatch):
+    from agent import tools
+    monkeypatch.setattr(tools, "run_tools", lambda *a, **k: [
+        {"tool": "get_run_status", "source": "payroll-api:PR-202609", "run_id": "PR-202609",
+         "status": "processing", "stage": "approval_pending"}])
+    bad = FakeModel({"reply": "Run PR-202609 finishes on 30 November.", "citations": [], "answerable": True})
+    store = MemoryAgentStore(TENANTS)
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES), model=bad,
+                classifier=Unsure())
+    tid, st = _chat(store, deps, "C-1001", "What is the status of payroll run PR-202609?", "conv-rs000001")
+    assert st["sent"] and st["draft_mode"] == "fallback"
+    assert "processing" in store.replies(tid)[0]["body"]

@@ -16,6 +16,10 @@ langgraph>=0.4
 langgraph-checkpoint-postgres>=2.0
 # phase 6: similar-ticket match (character n-gram TF-IDF + nearest neighbours)
 scikit-learn>=1.5
+# phase D: traces per ticket -> ADOT collector -> AWS X-Ray (off unless OTEL_EXPORTER_OTLP_ENDPOINT is set)
+opentelemetry-sdk>=1.27
+opentelemetry-exporter-otlp-proto-http>=1.27
+opentelemetry-sdk-extension-aws>=2.0
 # tests and lint
 pytest>=8.0
 httpx>=0.27             # FastAPI TestClient

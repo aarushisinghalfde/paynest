@@ -9,6 +9,7 @@ from functools import partial
 
 from agent.nodes import NODE_FUNCS, Deps
 from agent.state import NODES, TicketState
+from shared.tracing import span
 
 
 def build(deps: Deps, checkpointer):
@@ -25,6 +26,11 @@ def build(deps: Deps, checkpointer):
 
 
 def run(graph, ticket_id: str) -> dict:
+    with span("ticket", ticket_id=ticket_id):  # one trace per ticket; the nodes are its children
+        return _run(graph, ticket_id)
+
+
+def _run(graph, ticket_id: str) -> dict:
     config = {"configurable": {"thread_id": ticket_id}}
     snapshot = graph.get_state(config)
     if snapshot and snapshot.values:  # resume: continue from the unfinished node

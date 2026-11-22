@@ -95,7 +95,11 @@ def check(draft: str, *, ticket_text: str, region: str | None, language: str, hi
         body = body.replace(ref, " ")
     body = CITE_RE.sub(" ", body)
     numbers = [_norm_num(n) for n in NUMBER_RE.findall(body)]
-    if numbers and not cited:
+    # A number the customer wrote ("PR-202609") is an echo, not a claim: it needs no citation. Live
+    # check: "Payroll run PR-202609 is processing" without an inline [id] was parked as uncited.
+    asked = {_norm_num(n) for n in NUMBER_RE.findall(_norm_num(ticket_text or ""))}
+    claims = [n for n in numbers if n not in asked]
+    if claims and not cited:
         problems.append("uncited_answer")
     elif any(n not in grounded for n in numbers):
         problems.append("ungrounded_number")

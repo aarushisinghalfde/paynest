@@ -187,6 +187,28 @@ Resources:
             SH
             chmod 700 /opt/paynest/fetch-env.sh
 
+            # Phase D: traces. The worker sends OTLP spans to this collector, which forwards
+            # them to X-Ray with the instance role. ticket_id is indexed (searchable).
+            cat > /opt/paynest/otel.yaml <<'OTEL'
+            receivers:
+              otlp:
+                protocols:
+                  http:
+                    endpoint: 0.0.0.0:4318
+            processors:
+              batch: {}
+            exporters:
+              awsxray:
+                region: ${AWS::Region}
+                indexed_attributes: [ticket_id, route]
+            service:
+              pipelines:
+                traces:
+                  receivers: [otlp]
+                  processors: [batch]
+                  exporters: [awsxray]
+            OTEL
+
             # Production compose: same services as the laptop, minus Postgres (RDS) and
             # minus ~/.aws (containers use the instance role).
             cat > /opt/paynest/docker-compose.yml <<'YML'
@@ -205,8 +227,16 @@ Resources:
               worker:
                 <<: *app
                 command: python -m worker.main
+                environment:
+                  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+                  OTEL_SERVICE_NAME: paynest-worker
                 depends_on:
                   api: {condition: service_healthy}
+              otel-collector:
+                image: public.ecr.aws/aws-observability/aws-otel-collector:latest
+                command: ["--config=/etc/otel.yaml"]
+                volumes: ["/opt/paynest/otel.yaml:/etc/otel.yaml:ro"]
+                restart: unless-stopped
               mock-payroll-api:
                 <<: *app
                 command: uvicorn app:app --app-dir mock-payroll-api --host 0.0.0.0 --port 8081

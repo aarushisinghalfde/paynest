@@ -89,6 +89,14 @@ Resources:
                 Action: [sqs:GetQueueUrl, sqs:GetQueueAttributes]
                 Resource: !ImportValue
                   Fn::Sub: "${Project}-${Env}-TicketsDlqArn"
+              - Sid: WriteTraces        # phase D: the ADOT collector sends spans to X-Ray
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                Resource: "*"           # X-Ray has no resource-level control for these
               - Sid: EcrLogin
                 Effect: Allow
                 Action: ecr:GetAuthorizationToken

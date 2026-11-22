@@ -135,6 +135,14 @@ def classify(state, deps: Deps):
         c = {**c, "second": c.get("team") if c.get("team") != "Payroll" else c.get("second"), "team": "Payroll",
              "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.6),
              "source": f"{c.get('source', 'keywords')}+run_status"}
+    # A statutory figure (PF ceiling, gratuity, TDS slab...) always goes to Statutory and so to review.
+    # Eval: a Hindi PF-ceiling question read as Payroll and an Arabic gratuity question read as How-To,
+    # and both were answered without a person (guide only, but still the wrong channel).
+    if (c.get("team") != "Statutory" and conversation.asks_statutory_figure(text)
+            and not c.get("is_injection")):
+        c = {**c, "second": c.get("team"), "team": "Statutory", "branch": "auto",
+             "confidence": max(float(c.get("confidence") or 0), 0.6),
+             "source": f"{c.get('source', 'keywords')}+statutory_figure"}
     if state.get("talk") in ("greeting", "thanks", "status"):  # not a support topic: no team
         c = {**c, "team": None, "branch": "chat", "source": "conversation"}
     return {
@@ -204,8 +212,11 @@ def draft(state, deps: Deps):
         sources = {"as_of": as_of.isoformat(), "hits": [{k: _iso(v) for k, v in h.items()} for h in hits],
                    "facts": facts}
         if d:
+            fb = None
+            if d["mode"] == "model" and route_ == "reply":  # sent without review: keep the fixed wording ready
+                fb = drafter.fallback(hits, facts, as_of, ref, state.get("language", "en"))
             return {**out, "draft": d["reply"], "draft_mode": d["mode"], "citations": d["citations"],
-                    "sources": sources}
+                    "sources": sources, "fallback_draft": fb}
         out["sources"] = sources
     kind = {"block": "blocked", "incident": "incident", "duplicate": "duplicate", "ask": "clarify",
             "chat": {"thanks": "thanks", "status": "status"}.get(state.get("talk"), "greeting")}.get(route_, "ack")
