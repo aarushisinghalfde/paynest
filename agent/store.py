@@ -64,7 +64,7 @@ class PgAgentStore(PgTicketStore):
 
     def save_progress(self, ticket_id: str, **fields) -> None:
         allowed = {"agent_status", "route", "route_reason", "classification", "team", "language",
-                   "duplicate_of_ref", "jira_key", "incident_id", "conversation_id"}
+                   "duplicate_of_ref", "jira_key", "incident_id", "conversation_id", "route_rule", "answer_tier"}
         fields = {
             k: (json.dumps(v) if k == "classification" else v) for k, v in fields.items() if k in allowed
         }
@@ -80,14 +80,14 @@ class PgAgentStore(PgTicketStore):
             rows = conn.execute(
                 """SELECT t.id::text, coalesce(t.masked_body, ''), t.route,
                           (SELECT body_masked FROM sent_replies s WHERE s.ticket_id = t.id
-                            ORDER BY draft_version DESC LIMIT 1), t.tenant_id
+                            ORDER BY draft_version DESC LIMIT 1), t.tenant_id, t.team
                    FROM tickets t
                    WHERE t.conversation_id = %s AND t.id <> %s AND t.status = 'masked'
                      AND t.created_at <= (SELECT created_at FROM tickets WHERE id = %s)
                    ORDER BY t.created_at DESC LIMIT %s""",
                 (conversation_id, ticket_id, ticket_id, limit)).fetchall()
-        return [{"ticket_id": i, "text": b, "route": r, "reply": rep, "tenant_id": tn}
-                for i, b, r, rep, tn in reversed(rows)]
+        return [{"ticket_id": i, "text": b, "route": r, "reply": rep, "tenant_id": tn, "team": tm}
+                for i, b, r, rep, tn, tm in reversed(rows)]
 
     # ---- phase 7: recent tickets, incidents, Jira ------------------------------------
     def recent_tickets(self, tenant_id, created_at, exclude_id, hours: int = 72):
@@ -128,33 +128,51 @@ class PgAgentStore(PgTicketStore):
         return [{"key": k, "summary": s or "", "resolution_note": r or ""} for k, s, r in rows]
 
     # ---- review (minimal console) -----------------------------------------------------
-    def create_review(self, ticket_id, draft_version, draft, reason):
-        tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"review:{ticket_id}:{draft_version}"))
+    def create_review(self, ticket_id, draft_version, draft, reason, kind="reply", kb_ids=None):
+        tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"review:{ticket_id}:{draft_version}:{kind}"))
         with self._conn() as conn:
-            conn.execute("""INSERT INTO review_tasks (id, ticket_id, draft, route_reason, sources)
-                            VALUES (%s, %s, %s, %s, '[]') ON CONFLICT (id) DO NOTHING""",
-                         (tid, ticket_id, draft, reason))
+            conn.execute("""INSERT INTO review_tasks (id, ticket_id, draft, route_reason, sources, kind)
+                            VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                         (tid, ticket_id, draft, reason, json.dumps(kb_ids or []), kind))
         return tid
 
     def list_reviews(self, status="open"):
         with self._conn() as conn:
             rows = conn.execute("""SELECT r.id::text, r.ticket_id::text, r.draft, r.route_reason, r.created_at,
-                                          t.tenant_id, t.team, t.language, t.masked_body
+                                          t.tenant_id, t.team, t.language, t.masked_body, r.kind
                                    FROM review_tasks r JOIN tickets t ON t.id = r.ticket_id
                                    WHERE r.status = %s ORDER BY r.created_at""", (status,)).fetchall()
-        keys = ("id", "ticket_id", "draft", "route_reason", "created_at", "tenant_id", "team", "language", "body")
+        keys = ("id", "ticket_id", "draft", "route_reason", "created_at", "tenant_id", "team", "language", "body",
+                "kind")
         return [dict(zip(keys, r, strict=True)) for r in rows]
 
     def decide_review(self, task_id, decision, body=None, reviewer=None):
         with self._conn() as conn, conn.transaction():
+            kind = conn.execute("SELECT kind FROM review_tasks WHERE id = %s AND status = 'open'",
+                                (task_id,)).fetchone()
+            if kind is None:
+                return None
+            if decision == "approve" and kind[0] == "knowledge" and not (body or "").strip():
+                raise ValueError("write the answer before approving")
             row = conn.execute("""UPDATE review_tasks SET status = %s, decision = %s, assignee = %s,
                                          draft = coalesce(%s, draft), decided_at = now()
-                                  WHERE id = %s AND status = 'open' RETURNING ticket_id::text, draft""",
+                                  WHERE id = %s AND status = 'open' RETURNING ticket_id::text, draft, sources""",
                                ("approved" if decision == "approve" else "rejected", decision, reviewer, body,
                                 task_id)).fetchone()
             if row is None:
                 return None
-            ticket_id, draft = row
+            ticket_id, draft, sources = row
+            if decision == "approve" and kind[0] == "knowledge":
+                # the approved answer joins the How-To library: every similar question gets it from now on
+                conn.execute(
+                    """INSERT INTO howto_answers (id, region, language, question, answer, kb_ids, source, approved_by,
+                                                 ticket_id)
+                       SELECT %s, tn.region, coalesce(t.language, 'en'), coalesce(t.masked_body, ''), %s, %s,
+                              'agent_approved', %s, t.id
+                       FROM tickets t LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id WHERE t.id = %s
+                       ON CONFLICT (id) DO NOTHING""",
+                    (str(uuid.uuid5(uuid.NAMESPACE_URL, f"howto:{task_id}")), draft,
+                     [k for k in (sources or []) if isinstance(k, str)], reviewer, ticket_id))
             if decision == "approve":
                 version = conn.execute("SELECT coalesce(max(draft_version), 0) + 1 FROM sent_replies WHERE ticket_id = %s",
                                        (ticket_id,)).fetchone()[0]
@@ -163,6 +181,120 @@ class PgAgentStore(PgTicketStore):
             conn.execute("UPDATE tickets SET agent_status = %s WHERE id = %s",
                          ("replied" if decision == "approve" else "taken_over", ticket_id))
         return ticket_id
+
+    # ---- operations dashboard -----------------------------------------------------------
+    def dashboard_data(self, scope: str = "live", days: int = 7) -> dict:
+        """Raw rows for agent.dashboard.summarize: masked fields only, capped at 5,000 tickets."""
+        with self._conn() as conn:
+            if scope == "export":
+                where, params = "t.origin = 'export'", ()
+            else:
+                where, params = "t.origin = 'live' AND t.created_at >= now() - make_interval(days => %s)", (days,)
+            rows = conn.execute(
+                f"""SELECT t.id::text, coalesce(t.ticket_ref, left(t.id::text, 8)), t.created_at, t.tenant_id,
+                           t.team, t.initial_team, t.route, t.route_rule, t.route_reason, t.answer_tier,
+                           t.agent_status, t.language, t.classification, t.duplicate_of_ref,
+                           t.incident_id::text, t.jira_key, t.reassign_count, t.kb_ids, t.channel, t.status
+                    FROM tickets t WHERE {where} ORDER BY t.created_at DESC LIMIT 5000""", params).fetchall()
+            keys = ("id", "ref", "created_at", "tenant_id", "team", "initial_team", "route", "route_rule",
+                    "route_reason", "answer_tier", "agent_status", "language", "classification", "duplicate_of",
+                    "incident_id", "jira_key", "reassign_count", "kb_ids", "channel", "status")
+            tickets = [dict(zip(keys, r, strict=True)) for r in rows]
+            incidents = [dict(zip(("id", "tenant_id", "team", "signature", "opened_at", "ticket_count", "status",
+                                   "jira_key"), r, strict=True)) for r in conn.execute(
+                """SELECT id::text, tenant_id, team, left(signature, 120), opened_at, ticket_count, status, jira_key
+                   FROM incidents ORDER BY opened_at DESC LIMIT 50""").fetchall()]
+            reviews = dict(conn.execute("""SELECT kind || ':' || status, count(*) FROM review_tasks
+                                           GROUP BY kind, status""").fetchall())
+            library = conn.execute("SELECT count(*) FROM howto_answers WHERE active").fetchone()[0]
+        return {"tickets": tickets, "incidents": incidents, "reviews": reviews, "library_size": library}
+
+    # ---- phase B: knowledge import ---------------------------------------------------------
+    def import_articles(self, articles, imported_by=None) -> list[dict]:
+        """Replace each article's chunks (one transaction per upload); add a title row if the KB lacks one."""
+        out = []
+        with self._conn() as conn, conn.transaction():
+            for a in articles:
+                conn.execute("DELETE FROM kb_chunks WHERE kb_id = %s AND source_kind = 'kb_article'", (a.kb_id,))
+                had_title = conn.execute("SELECT 1 FROM kb_chunks WHERE chunk_id = %s",
+                                         (f"{a.kb_id}#title",)).fetchone() is not None
+                if not had_title:
+                    conn.execute("""INSERT INTO kb_chunks (chunk_id, kb_id, source_kind, region, topic, language,
+                                                           title, content, last_reviewed)
+                                    VALUES (%s, %s, 'kb_title', %s, %s, %s, %s, %s, current_date)""",
+                                 (f"{a.kb_id}#title", a.kb_id, a.region, a.topic, a.language, a.title,
+                                  f"{a.kb_id}: {a.title}"))
+                for i, text in enumerate(a.chunks, start=1):
+                    conn.execute("""INSERT INTO kb_chunks (chunk_id, kb_id, source_kind, region, topic, language,
+                                                           title, content, effective_from, last_reviewed)
+                                    VALUES (%s, %s, 'kb_article', %s, %s, %s, %s, %s, NULL, current_date)""",
+                                 (f"{a.kb_id}#article{i}", a.kb_id, a.region, a.topic, a.language, a.title, text))
+                conn.execute("""INSERT INTO knowledge_imports (kb_id, title, region, language, topic, chunks,
+                                                               masked_counts, created_title, imported_by)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (kb_id) DO UPDATE SET title = EXCLUDED.title, region = EXCLUDED.region,
+                                  language = EXCLUDED.language, topic = EXCLUDED.topic, chunks = EXCLUDED.chunks,
+                                  masked_counts = EXCLUDED.masked_counts, active = true,
+                                  created_title = knowledge_imports.created_title OR EXCLUDED.created_title,
+                                  imported_by = EXCLUDED.imported_by, imported_at = now()""",
+                             (a.kb_id, a.title, a.region, a.language, a.topic, len(a.chunks),
+                              json.dumps(a.masked_counts), not had_title, imported_by))
+                out.append({"kb_id": a.kb_id, "title": a.title, "chunks": len(a.chunks), "topic": a.topic,
+                            "masked": sum(a.masked_counts.values()), "new_title": not had_title})
+        return out
+
+    def withdraw_article(self, kb_id) -> bool:
+        with self._conn() as conn, conn.transaction():
+            row = conn.execute("""UPDATE knowledge_imports SET active = false, imported_at = now()
+                                  WHERE kb_id = %s AND active RETURNING created_title""", (kb_id,)).fetchone()
+            if row is None:
+                return False
+            conn.execute("DELETE FROM kb_chunks WHERE kb_id = %s AND source_kind = 'kb_article'", (kb_id,))
+            if row[0]:
+                conn.execute("DELETE FROM kb_chunks WHERE chunk_id = %s", (f"{kb_id}#title",))
+        return True
+
+    def list_imports(self) -> dict:
+        with self._conn() as conn:
+            rows = conn.execute("""SELECT kb_id, title, region, language, topic, chunks, masked_counts, imported_at
+                                   FROM knowledge_imports WHERE active ORDER BY imported_at DESC""").fetchall()
+            lib = conn.execute("SELECT source, count(*) FROM howto_answers WHERE active GROUP BY source").fetchall()
+        keys = ("kb_id", "title", "region", "language", "topic", "chunks", "masked_counts", "imported_at")
+        return {"articles": [dict(zip(keys, r, strict=True)) for r in rows], "library": dict(lib)}
+
+    def import_answers(self, rows, imported_by=None) -> int:
+        with self._conn() as conn, conn.transaction():
+            for r in rows:
+                conn.execute("""INSERT INTO howto_answers (id, region, language, question, answer, kb_ids, source,
+                                                           approved_by)
+                                VALUES (%s, %s, %s, %s, %s, %s, 'imported', %s) ON CONFLICT (id) DO UPDATE
+                                SET answer = EXCLUDED.answer, active = true""",
+                             (str(uuid.uuid5(uuid.NAMESPACE_URL, f"howto-import:{r['language']}:{r['question']}")),
+                              r["region"], r["language"], r["question"], r["answer"], r["kb_ids"], imported_by))
+        return len(rows)
+
+    def knowledge_stamp(self) -> str:
+        """Changes whenever an article is imported or withdrawn: the worker reloads its retriever then."""
+        with self._conn() as conn:
+            n, last = conn.execute("""SELECT (SELECT count(*) FROM kb_chunks),
+                                             (SELECT max(imported_at) FROM knowledge_imports)""").fetchone()
+        return f"{n}|{last}"
+
+    def howto_answers(self, region, language) -> list[dict]:
+        """Approved How-To answers for this region (or all regions) and language."""
+        with self._conn() as conn:
+            rows = conn.execute("""SELECT id::text, question, answer, kb_ids, region FROM howto_answers
+                                   WHERE active AND language = %s AND (region IS NULL OR region = %s)
+                                   ORDER BY created_at DESC LIMIT 1000""", (language, region)).fetchall()
+        return [{"id": i, "question": q, "answer": a, "kb_ids": list(k or []), "region": r} for i, q, a, k, r in rows]
+
+    def resolved_examples(self) -> list[dict]:
+        """Past tickets where an agent recorded the KB article that solved it (masked question -> article)."""
+        with self._conn() as conn:
+            rows = conn.execute("""SELECT t.masked_body, t.kb_ids, tn.region FROM tickets t
+                                   LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id
+                                   WHERE cardinality(t.kb_ids) > 0 AND t.masked_body IS NOT NULL""").fetchall()
+        return [{"question": q, "kb_id": k[0], "region": r} for q, k, r in rows if k]
 
     def knowledge(self) -> tuple[list[dict], list[dict]]:
         """(kb_chunks, statutory_rules) for the retriever; loaded once at worker start."""
@@ -244,7 +376,7 @@ class MemoryAgentStore(MemoryTicketStore):
         upto = order[: order.index(ticket_id)] if ticket_id in order else order
         turns = [
             {"ticket_id": i, "text": self.tickets[i].get("masked_body") or "", "route": self.tickets[i].get("route"),
-             "tenant_id": self.tickets[i].get("tenant_id"),
+             "tenant_id": self.tickets[i].get("tenant_id"), "team": self.tickets[i].get("team"),
              "reply": next((r["body"] for (t, _v), r in sorted(self.sent.items(), reverse=True) if t == i), None)}
             for i in upto
             if self.tickets[i].get("conversation_id") == conversation_id and self.tickets[i].get("status") == "masked"
@@ -287,12 +419,84 @@ class MemoryAgentStore(MemoryTicketStore):
 
     reviews: dict = None
 
-    def create_review(self, ticket_id, draft_version, draft, reason):
+    library: list = None
+    examples: list = None
+
+    def create_review(self, ticket_id, draft_version, draft, reason, kind="reply", kb_ids=None):
         self.reviews = self.reviews or {}
-        rid = f"{ticket_id}:{draft_version}"
+        rid = f"{ticket_id}:{draft_version}:{kind}"
         self.reviews.setdefault(rid, {"id": rid, "ticket_id": ticket_id, "draft": draft, "route_reason": reason,
-                                      "status": "open"})
+                                      "status": "open", "kind": kind, "kb_ids": kb_ids or []})
         return rid
+
+    def howto_answers(self, region, language):
+        return [a for a in (self.library or []) if a["language"] == language and a.get("region") in (None, region)]
+
+    kb: list = None
+    imports: dict = None
+
+    def import_articles(self, articles, imported_by=None):
+        self.kb, self.imports = self.kb or [], self.imports or {}
+        out = []
+        for a in articles:
+            self.kb = [c for c in self.kb if not (c["kb_id"] == a.kb_id and c["source_kind"] == "kb_article")]
+            had = any(c["chunk_id"] == f"{a.kb_id}#title" for c in self.kb)
+            if not had:
+                self.kb.append({"chunk_id": f"{a.kb_id}#title", "kb_id": a.kb_id, "source_kind": "kb_title",
+                                "region": a.region, "topic": a.topic, "title": a.title,
+                                "content": f"{a.kb_id}: {a.title}"})
+            self.kb += [{"chunk_id": f"{a.kb_id}#article{i}", "kb_id": a.kb_id, "source_kind": "kb_article",
+                         "region": a.region, "topic": a.topic, "title": a.title, "content": t}
+                        for i, t in enumerate(a.chunks, start=1)]
+            self.imports[a.kb_id] = {"created_title": not had, "title": a.title, "chunks": len(a.chunks)}
+            out.append({"kb_id": a.kb_id, "title": a.title, "chunks": len(a.chunks), "topic": a.topic,
+                        "masked": sum(a.masked_counts.values()), "new_title": not had})
+        return out
+
+    def withdraw_article(self, kb_id):
+        imp = (self.imports or {}).pop(kb_id, None)
+        if imp is None:
+            return False
+        self.kb = [c for c in self.kb if not (c["kb_id"] == kb_id and (c["source_kind"] == "kb_article" or
+                                                                          imp["created_title"]))]
+        return True
+
+    def knowledge_stamp(self):
+        return f"{len(self.kb or [])}|{sorted((self.imports or {}).items())}"
+
+    def knowledge(self):
+        return list(self.kb or []), list(getattr(self, "rules", None) or [])
+
+    def list_imports(self):
+        return {"articles": [{"kb_id": k, **v} for k, v in (self.imports or {}).items()],
+                "library": {"imported": len(self.library or [])}}
+
+    def import_answers(self, rows, imported_by=None):
+        self.library = self.library or []
+        self.library += [{"id": f"imp-{len(self.library) + i}", **r} for i, r in enumerate(rows)]
+        return len(rows)
+
+    def dashboard_data(self, scope="live", days=7):
+        tickets = [{"id": i, "ref": t.get("ticket_ref") or i[:8], "created_at": t.get("created_at"),
+                    "tenant_id": t.get("tenant_id"), "team": t.get("team"), "initial_team": t.get("initial_team"),
+                    "route": t.get("route"), "route_rule": t.get("route_rule"), "route_reason": t.get("route_reason"),
+                    "answer_tier": t.get("answer_tier"), "agent_status": t.get("agent_status"),
+                    "language": t.get("language"), "classification": t.get("classification"),
+                    "duplicate_of": t.get("duplicate_of_ref"), "incident_id": t.get("incident_id"),
+                    "jira_key": t.get("jira_key"), "reassign_count": t.get("reassign_count"),
+                    "kb_ids": t.get("kb_ids") or [], "channel": t.get("channel"), "status": t.get("status")}
+                   for i, t in self.tickets.items() if (t.get("origin") or "live") == scope]
+        reviews = {}
+        for r in (self.reviews or {}).values():
+            k = f"{r.get('kind', 'reply')}:{r['status']}"
+            reviews[k] = reviews.get(k, 0) + 1
+        incidents = [{**v, "team": v.get("team"), "status": "open", "jira_key": None,
+                      "ticket_count": sum(1 for t in self.tickets.values() if t.get("incident_id") == i)}
+                     for i, v in (self.incidents or {}).items()]
+        return {"tickets": tickets, "incidents": incidents, "reviews": reviews, "library_size": len(self.library or [])}
+
+    def resolved_examples(self):
+        return list(self.examples or [])
 
     def list_reviews(self, status="open"):
         return [dict(r, body=self.tickets[r["ticket_id"]]["masked_body"]) for r in (self.reviews or {}).values()
@@ -302,6 +506,14 @@ class MemoryAgentStore(MemoryTicketStore):
         r = (self.reviews or {}).get(task_id)
         if not r or r["status"] != "open":
             return None
+        if decision == "approve" and r.get("kind") == "knowledge":
+            if not (body or "").strip():
+                raise ValueError("write the answer before approving")
+            t = self.tickets[r["ticket_id"]]
+            self.library = self.library or []
+            self.library.append({"id": f"lib-{len(self.library) + 1}", "question": t.get("masked_body") or "",
+                                 "answer": body, "kb_ids": r.get("kb_ids") or [], "language": t.get("language") or "en",
+                                 "region": (self.tenants.get(t["tenant_id"]) or {}).get("region")})
         r["status"] = "approved" if decision == "approve" else "rejected"
         if decision == "approve":
             n = len(self.replies(r["ticket_id"])) + 1

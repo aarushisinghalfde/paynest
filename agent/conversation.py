@@ -56,3 +56,13 @@ def is_follow_up(text: str) -> bool:
     """A message that only makes sense with the previous one: "and for contractors?", "aur UAE ke liye?"."""
     t = _clean(text)
     return bool(FOLLOW_UP.match(t)) or (0 < len(t.split()) <= 4 and not TOPIC_HINT.search(t) and kind(t) is None)
+
+
+QUESTION_START = re.compile(
+    r"^\s*(what|how|where|when|why|which|who|can|could|is|are|do|does|will|should|kya|kaise|kab|kahan|kyun"
+    r"|क्या|कैसे|कब|कहाँ|क्यों|ما|ماذا|كيف|متى|هل|أين|لماذا)\b", re.I)
+
+
+def is_new_question(text: str) -> bool:
+    """A self-contained question ("What is the status of run PR-1?"), not an answer to ours."""
+    return bool(QUESTION_START.match(text or "")) and len(_clean(text).split()) >= 4

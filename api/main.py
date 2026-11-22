@@ -162,6 +162,66 @@ def _admin(token: str | None):
         raise HTTPException(401, "admin token required")
 
 
+@app.get("/dashboard")
+def dashboard(scope: str = "live", days: int = 7, x_admin_token: str | None = Header(default=None)) -> dict:
+    """Operations dashboard data (admin token): classification, merges, resolution. Masked data only."""
+    _admin(x_admin_token)
+    if scope not in ("live", "export") or not 1 <= days <= 90:
+        raise HTTPException(422, "scope must be live or export; days 1-90")
+    from agent.dashboard import summarize
+
+    return summarize(get_store().dashboard_data(scope, days), scope)
+
+
+class ArticleFile(BaseModel):
+    filename: str = Field(max_length=200)
+    text: str = Field(max_length=60_000)
+
+
+class KnowledgeUpload(BaseModel):
+    articles: list[ArticleFile] = Field(default_factory=list, max_length=200)
+    answers_csv: str | None = Field(default=None, max_length=500_000)
+    imported_by: str | None = Field(default=None, max_length=80)
+
+
+@app.get("/knowledge")
+def knowledge_list(x_admin_token: str | None = Header(default=None)) -> dict:
+    """Imported articles and the How-To answer library size (admin token)."""
+    _admin(x_admin_token)
+    return get_store().list_imports()
+
+
+@app.post("/knowledge")
+def knowledge_upload(up: KnowledgeUpload, x_admin_token: str | None = Header(default=None)) -> dict:
+    """Import support articles and approved answers into the database (admin token).
+
+    Everything is masked before it is stored; a file that fails validation stops the whole
+    upload (nothing is half-imported). The agent picks the new knowledge up within a minute.
+    """
+    _admin(x_admin_token)
+    from agent import knowledge_import as ki
+
+    try:
+        articles = [ki.parse_article(f.filename, f.text) for f in up.articles]
+        answers = ki.parse_answers_csv(up.answers_csv) if up.answers_csv else []
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    store = get_store()
+    result = {"articles": store.import_articles(articles, up.imported_by) if articles else [],
+              "answers_imported": store.import_answers(answers, up.imported_by) if answers else 0,
+              "answers_masked_values": sum(a["masked"] for a in answers)}
+    log_event(log, "knowledge_imported", articles=len(articles), answers=len(answers))
+    return result
+
+
+@app.delete("/knowledge/{kb_id}")
+def knowledge_withdraw(kb_id: str, x_admin_token: str | None = Header(default=None)) -> dict:
+    _admin(x_admin_token)
+    if not get_store().withdraw_article(kb_id.upper()):
+        raise HTTPException(404, "no active import with that id")
+    return {"withdrawn": kb_id.upper()}
+
+
 @app.get("/review/tasks")
 def review_tasks(x_admin_token: str | None = Header(default=None)) -> list:
     _admin(x_admin_token)
@@ -171,7 +231,10 @@ def review_tasks(x_admin_token: str | None = Header(default=None)) -> list:
 @app.post("/review/tasks/{task_id}")
 def review_decide(task_id: str, d: Decision, x_admin_token: str | None = Header(default=None)) -> dict:
     _admin(x_admin_token)
-    ticket_id = get_store().decide_review(task_id, d.decision, d.body, d.reviewer)
+    try:
+        ticket_id = get_store().decide_review(task_id, d.decision, d.body, d.reviewer)
+    except ValueError as exc:  # a knowledge task approved without writing the answer
+        raise HTTPException(400, str(exc)) from None
     if ticket_id is None:
         raise HTTPException(404, "task not found or already decided")
     log_event(log, "review_decided", task_id=task_id, ticket_id=ticket_id, decision=d.decision)

@@ -342,3 +342,62 @@ def test_update_request_while_waiting_for_review_gets_a_status_reply():
     assert st["route"] == "chat" and st["sent"] and not store.list_reviews()[1:]  # no second review task
     reply = store.replies(t2)[0]["body"]
     assert t1[:8] in reply and "payroll specialist" in reply
+
+
+# ---- How-To agent: library -> cache -> RAG (with past resolutions) -> learning loop ----------------
+
+ONBOARD = {"chunk_id": "KB-0102#title", "kb_id": "KB-0102", "source_kind": "kb_title", "region": "ALL",
+           "topic": "howto_onboard", "title": "Adding a new employee (single and bulk upload)",
+           "content": "KB-0102: Adding a new employee (single and bulk upload)"}
+EXAMPLES = [{"question": "We want only HR heads to see CTC. How to set role permissions?", "kb_id": "KB-0102"},
+            {"question": "How do I restrict who sees salary data?", "kb_id": "KB-0102"},
+            {"question": "Restrict salary visibility to HR heads only", "kb_id": "KB-0102"}]
+
+
+def _howto_deps(store, cache=None):
+    return Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, ONBOARD], RULES, examples=EXAMPLES),
+                answer_cache=cache)
+
+
+def test_past_resolutions_find_the_guide_the_title_alone_would_miss():
+    r = Retriever([*CHUNKS, PAYSLIP, ONBOARD], RULES, examples=EXAMPLES)
+    q = "how can I make salary data visible only to HR heads?"
+    top = r.howto_articles(q, "IN", date(2026, 9, 1))[0]
+    assert top["chunk_id"] == "KB-0102#title" and top["solved"] >= 2
+    without = Retriever([*CHUNKS, PAYSLIP, ONBOARD], RULES).howto_articles(q, "IN", date(2026, 9, 1))
+    assert not without or without[0]["chunk_id"] != "KB-0102#title" or without[0]["score"] < top["score"]
+
+
+def test_learning_loop_support_writes_once_then_every_similar_question_gets_the_steps():
+    store = MemoryAgentStore(TENANTS)
+    deps = _howto_deps(store)
+    t1, first = _chat(store, deps, "How do I download payslips for all employees?", cid="conv-a1b2c3d4")
+    assert first["draft_mode"] == "fallback" and "KB-0105" in store.replies(t1)[0]["body"]
+    task = next(t for t in store.list_reviews() if t["kind"] == "knowledge")
+    with pytest.raises(ValueError):
+        store.decide_review(task["id"], "approve", "")  # an answer must be written
+    steps = "Go to Payroll > Payslips, pick the month, select all employees and choose Download as ZIP."
+    store.decide_review(task["id"], "approve", steps, "arvind")
+    assert store.replies(t1)[-1]["body"] == steps  # the first customer gets the steps too
+    t2, second = _chat(store, deps, "how can I download the payslips of all my employees", cid="conv-e5f6a7b8")
+    assert second["draft_mode"] == "library" and second["guard"]["ok"] and second["sent"]
+    assert customer_view(store.replies(t2)[0]["body"]) == steps
+    assert "approved How-To answers" in store.tickets[t2]["route_reason"]
+    assert not [t for t in store.list_reviews() if t["kind"] == "knowledge"]  # nothing new to write
+
+
+def test_one_knowledge_task_per_question_not_one_per_customer():
+    store = MemoryAgentStore(TENANTS)
+    deps = _howto_deps(store)
+    _chat(store, deps, "How do I download payslips for all employees?", cid="conv-11111111")
+    _chat(store, deps, "how can I download the payslips of all my employees", cid="conv-22222222")
+    assert len([t for t in store.list_reviews() if t["kind"] == "knowledge"]) == 1
+
+
+def test_stuck_after_the_guide_hands_over_to_a_teammate_with_the_conversation():
+    store = MemoryAgentStore(TENANTS)
+    deps = _howto_deps(store)
+    _chat(store, deps, "How do I download payslips for all employees?", cid="conv-33333333")
+    t2, st = _chat(store, deps, "I can't find the bulk download option anywhere", cid="conv-33333333")
+    assert st["context_team"] == "How-To" and st["team"] == "How-To"
+    assert "passed this to our How-To team" in store.replies(t2)[0]["body"]

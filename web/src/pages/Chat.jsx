@@ -79,9 +79,14 @@ export default function Chat() {
   }
 
   useEffect(() => {
-    const open = Object.entries(tickets).filter(([, t]) => !FINAL.has(t.status))
-    if (!open.length) return
+    // Keep checking every message of this conversation: a teammate's written steps or an approved
+    // answer can arrive after the first reply. Finished tickets are checked every 10 s, open ones every 2 s.
+    const ids = Object.keys(tickets)
+    if (!ids.length) return
+    let tick = 0
     const timer = setInterval(async () => {
+      tick += 1
+      const open = Object.entries(tickets).filter(([, t]) => !FINAL.has(t.status) || tick % 5 === 0)
       for (const [id] of open) {
         try {
           const r = await fetch(`/api/tickets/${id}`)

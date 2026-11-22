@@ -118,8 +118,9 @@ def build_gate():
         from agent.retrieval import Retriever
 
         chunks, rules = store.knowledge()
-        retriever = Retriever(chunks, rules)
-        log_event(log, "knowledge_loaded", chunks=len(chunks), rules=len(rules))
+        examples = store.resolved_examples()  # past questions and the KB article that solved each
+        retriever = Retriever(chunks, rules, examples=examples)
+        log_event(log, "knowledge_loaded", chunks=len(chunks), rules=len(rules), resolved_examples=len(examples))
     answer_cache = None
     if retriever is not None and settings.REDIS_URL:
         import redis
@@ -132,7 +133,42 @@ def build_gate():
                 model=client if client.key else None, payroll_url=settings.PAYROLL_API_URL,
                 draft_rung=config().get("defaults", {}).get("draft", 1))
     graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))
-    return lambda ticket_id: agent_graph.run(graph, ticket_id)
+    reload = knowledge_reloader(deps, store) if retriever is not None else (lambda: None)
+
+    def gate(ticket_id):
+        reload()  # pick up imported or withdrawn articles (checked at most once a minute)
+        return agent_graph.run(graph, ticket_id)
+
+    return gate
+
+
+def knowledge_reloader(deps, store, every: float = 60.0, clock=time.monotonic):
+    """Rebuild the retriever from the database when the knowledge changed (phase B imports).
+
+    The graph holds `deps`, so swapping deps.retriever takes effect on the next ticket. The new
+    KB version also starts a fresh answer-cache bucket, so no stale cached answer is reused.
+    A failed check keeps the current knowledge and tries again a minute later.
+    """
+    from agent.retrieval import Retriever
+
+    state = {"stamp": store.knowledge_stamp(), "checked": clock()}
+
+    def reload():
+        if clock() - state["checked"] < every:
+            return
+        state["checked"] = clock()
+        try:
+            stamp = store.knowledge_stamp()
+            if stamp == state["stamp"]:
+                return
+            chunks, rules = store.knowledge()
+            deps.retriever = Retriever(chunks, rules, examples=store.resolved_examples())
+            state["stamp"] = stamp
+            log_event(log, "knowledge_reloaded", chunks=len(chunks), kb_version=deps.retriever.version)
+        except Exception as exc:  # noqa: BLE001 - keep answering with what we have
+            log_event(log, "knowledge_reload_failed", logging.WARNING, **safe_error(exc))
+
+    return reload
 
 
 def main() -> None:

@@ -66,7 +66,18 @@ STATUS = {
 }
 
 
+HANDOFF = {
+    "en": "Thanks, that helps. I've passed this to our How-To team together with our conversation, so you won't "
+    "need to repeat anything. They'll reply here with the exact steps.",
+    "hi-Latn": "Shukriya, isse madad mili. Maine ise hamari How-To team ko is baatcheet ke saath bhej diya hai, aapko "
+    "kuch dohraana nahi padega. Wo yahin exact steps ke saath jawab denge.",
+    "hi": "धन्यवाद, इससे मदद मिली। मैंने इसे हमारी टीम को इस बातचीत के साथ भेज दिया है, आपको कुछ दोहराना नहीं पड़ेगा। "
+    "टीम यहीं सटीक चरणों के साथ जवाब देगी।",
+    "ar": "شكراً، هذا مفيد. أحلت طلبك إلى فريقنا مع هذه المحادثة، فلن تحتاج إلى التكرار. سيرد الفريق هنا بالخطوات الدقيقة.",
+}
+
+
 def render(kind: str, language: str, **kw) -> str:
     table = {"ack": ACK, "incident": INCIDENT, "duplicate": DUPLICATE, "greeting": GREETING, "thanks": THANKS,
-             "clarify": CLARIFY, "status": STATUS}.get(kind, BLOCKED)
+             "clarify": CLARIFY, "status": STATUS, "handoff": HANDOFF}.get(kind, BLOCKED)
     return table.get(language, table["en"]).format(**kw)

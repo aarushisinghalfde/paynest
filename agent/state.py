@@ -38,6 +38,7 @@ class TicketState(TypedDict, total=False):
     talk: str | None  # greeting | thanks | vague | status (agent/conversation.py, normalise)
     status_of: dict | None  # the earlier ticket an "update?" refers to: {ref, route}
     context: str | None  # the earlier message this one follows up (same conversation)
+    context_team: str | None  # team of that earlier turn (How-To: keep the How-To thread)
     history: list[dict]  # last turns of this conversation, masked: [{text, reply}]
     duplicate_reason: str | None
     incident_id: str | None
@@ -46,7 +47,9 @@ class TicketState(TypedDict, total=False):
     waiting_review: bool
     draft: str | None
     draft_version: int
-    draft_mode: str  # cache | model | fallback | template
+    draft_mode: str  # library | cache | model | fallback | template
+    howto: bool  # answered by the How-To agent (library -> cache -> RAG)
+    learn_kb: list[str]  # How-To answered with a guide only: ask support to write the steps once
     citations: list[str]
     sources: dict  # {"as_of", "hits", "facts"}: what the draft was allowed to use (phase 8)
     guard: dict

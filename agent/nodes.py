@@ -12,7 +12,17 @@ crash is safe. Every node is traced (shared/tracing.py, phase 11).
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from agent import conversation, drafter, injection, keywords, retrieval, router, templates, tools
+from agent import (
+    answer_library,
+    conversation,
+    drafter,
+    injection,
+    keywords,
+    retrieval,
+    router,
+    templates,
+    tools,
+)
 from agent import dedupe as dd
 from agent import guard as out_guard
 from intake.pipeline import process_ticket
@@ -66,7 +76,7 @@ def _question(state) -> str:
 def normalise(state, deps: Deps):
     text = " ".join(f"{state.get('subject', '')} {state.get('body', '')}".split())
     talk = conversation.kind(text)
-    history, context, status_of = [], None, None
+    history, context, status_of, context_team = [], None, None, None
     cid = state.get("meta", {}).get("conversation_id")
     if cid and hasattr(deps.store, "conversation"):
         history = [h for h in deps.store.conversation(cid, state["ticket_id"])
@@ -74,16 +84,20 @@ def normalise(state, deps: Deps):
         prev = history[-1] if history else None
         # joined with the previous turn only when it answers our clarifying question, or is plainly
         # a follow-up ("and for contractors?"); a new vague message gets its own clarifying question
+        last = ((prev or {}).get("reply") or "")[-160:]
+        # our last reply asked them something, and this is their answer (not a brand-new question)
+        we_asked = ("?" in last or "؟" in last) and not conversation.is_new_question(text)
         if prev and talk not in ("greeting", "thanks") and prev.get("route") not in ("chat", None) and (
-            prev.get("route") == "ask" or (talk is None and conversation.is_follow_up(text))
+            prev.get("route") == "ask" or (we_asked and talk != "vague")
+            or (talk is None and conversation.is_follow_up(text))
         ):
-            context = prev["text"]
+            context, context_team = prev["text"], prev.get("team")
             talk = None if talk == "vague" else talk
         elif prev and talk == "vague" and prev.get("route") in ("review", "queue", "incident"):
             talk = "status"  # "update?" while an earlier question is still with a person
             status_of = {"ref": prev["ticket_id"][:8], "route": prev.get("route")}
     return {"language": language(text), "injection_rules": injection.detect(text), "talk": talk,
-            "context": context, "status_of": status_of, "history": [{"text": h["text"][:400], "reply": (h.get("reply") or "")[:400]}
+            "context": context, "context_team": context_team, "status_of": status_of, "history": [{"text": h["text"][:400], "reply": (h.get("reply") or "")[:400]}
                                              for h in history[-3:]],
             "steps": _step(state, "normalise")}
 
@@ -99,7 +113,8 @@ def classify(state, deps: Deps):
         c["branch"] = "auto" if c["team"] and c["confidence"] >= 0.6 else "triage"
     else:
         c = deps.classifier.classify(text, ticket_id=state["ticket_id"])
-    if conversation.is_howto(text) and not c.get("priority_signal") and not c.get("is_injection"):
+    continues_howto = state.get("context_team") == "How-To"  # the answer to our How-To question
+    if (conversation.is_howto(text) or continues_howto) and not c.get("priority_signal") and not c.get("is_injection"):
         # "how do I ..." with no sign of a problem is a how-to-use question (SOP: How-To team)
         c = {**c, "second": c.get("team") if c.get("team") != "How-To" else c.get("second"), "team": "How-To",
              "branch": "auto", "confidence": max(float(c.get("confidence") or 0), 0.7),
@@ -156,22 +171,18 @@ def draft(state, deps: Deps):
         q = _question(state)
         as_of = retrieval.question_date(q, state.get("meta", {}).get("created_at"))
         region = (state.get("tenant") or {}).get("region")
-        howto = state.get("team") == "How-To" and route_ in ("reply", "queue")
-        if howto and deps.answer_cache is not None:  # 1. cache: an answer we have already given
-            hit = deps.answer_cache.get(q, region, state.get("language", "en"), deps.retriever.version)
-            if hit:
-                return {**out, "draft": hit["answer"], "draft_mode": "cache", "citations": hit["citations"],
-                        "sources": {"as_of": as_of.isoformat(), "hits": hit["hits"], "facts": [],
-                                    "cache_similarity": hit["similarity"]}}
+        lang = state.get("language", "en")
+        howto = route_ in ("reply", "queue") and (state.get("team") == "How-To" or conversation.is_howto(q))
+        if howto:
+            return {**out, "howto": True, **_howto(state, deps, q, region, lang, as_of, queued)}
         if route_ == "review":  # a person approves it: all approved sources and every tool
             hits = deps.retriever.search(q, region, as_of)
             facts = tools.run_tools(state, deps.retriever.rules, as_of, deps.payroll_url)
-        else:  # sent without review: guides (how-to questions only) and run status, never a statutory figure
-            asks_how = state.get("team") == "How-To" or conversation.is_howto(q)
-            hits = deps.retriever.search(q, region, as_of, kinds=("kb_title",)) if asks_how else []
+        else:  # sent without review: run status only, never a statutory figure
+            hits = []
             facts = [] if queued else [f for f in tools.run_tools(state, deps.retriever.rules, as_of,
                                                                   deps.payroll_url) if f["tool"] != "get_rate"]
-        d = drafter.draft(state, hits, facts, as_of, model=deps.model, rung=deps.draft_rung)  # 2. RAG
+        d = drafter.draft(state, hits, facts, as_of, model=deps.model, rung=deps.draft_rung)
         sources = {"as_of": as_of.isoformat(), "hits": [{k: _iso(v) for k, v in h.items()} for h in hits],
                    "facts": facts}
         if d:
@@ -185,6 +196,52 @@ def draft(state, deps: Deps):
                             duplicate_of=state.get("duplicate_of") or "", earlier=earlier.get("ref", ""),
                             who="a payroll specialist" if earlier.get("route") == "review" else "our support team")
     return {**out, "draft": text, "draft_mode": "template"}
+
+
+def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
+    """How-To agent: approved library -> answer cache -> RAG over guides (+ past resolutions) -> compose."""
+    when = as_of.isoformat()
+    # 1. approved answers written by support: real steps, reused for every similar question
+    if hasattr(deps.store, "howto_answers"):
+        hit = answer_library.best(q, deps.store.howto_answers(region, lang))
+        if hit:
+            src = answer_library.as_source(hit)
+            return {"draft": f"{hit['answer']} [{src['chunk_id']}]", "draft_mode": "library",
+                    "citations": [src["chunk_id"]],
+                    "sources": {"as_of": when, "hits": [src], "facts": [], "library_similarity": hit["similarity"]}}
+    # 2. answers already given (Redis), keyed by KB version
+    if deps.answer_cache is not None:
+        hit = deps.answer_cache.get(q, region, lang, deps.retriever.version)
+        if hit:
+            return {"draft": hit["answer"], "draft_mode": "cache", "citations": hit["citations"],
+                    "sources": {"as_of": when, "hits": hit["hits"], "facts": [], "cache_similarity": hit["similarity"]}}
+    # 3. RAG: guides ranked by title and by the past questions each one solved; run status if asked
+    articles = deps.retriever.howto_articles(q, region, as_of)
+    if state.get("context_team") == "How-To" and not any(a.get("has_steps") for a in articles):
+        # second turn and still no written steps: a teammate takes over with the whole conversation
+        learn = [a["kb_id"] or a["chunk_id"].split("#")[0] for a in articles[:1]] or ["none"]
+        return {"sources": {"as_of": when, "hits": [], "facts": []}, **_template(state, "handoff"),
+                "learn_kb": learn}
+    facts = [] if queued else [f for f in tools.run_tools(state, deps.retriever.rules, as_of, deps.payroll_url)
+                               if f["tool"] == "get_run_status"]
+    sources = {"as_of": when, "hits": [{k: _iso(v) for k, v in a.items()} for a in articles], "facts": facts}
+    # 4. compose a conversational reply from those sources only
+    d = drafter.draft_howto(state, articles, model=deps.model, rung=deps.draft_rung)
+    if d is None and facts:
+        d = drafter.draft(state, [], facts, as_of, model=deps.model, rung=deps.draft_rung)
+    if d is None:
+        return {"sources": sources, **_template(state, "ack")}
+    # 5. no source had real steps: ask support to write the answer once (learning loop, in send)
+    learn = [a["kb_id"] or a["chunk_id"].split("#")[0] for a in articles[:1] if not a.get("has_steps")]
+    return {"draft": d["reply"], "draft_mode": d["mode"], "citations": d["citations"], "sources": sources,
+            "learn_kb": learn}
+
+
+def _template(state, kind) -> dict:
+    ref = state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8]
+    text = templates.render(kind, state.get("language", "en"), ref=ref, team=state.get("team") or "support",
+                            duplicate_of="", earlier="", who="our support team")
+    return {"draft": text, "draft_mode": "template"}
 
 
 def output_guard(state, deps: Deps):
@@ -205,7 +262,8 @@ def output_guard(state, deps: Deps):
 
 def send(state, deps: Deps):
     common = dict(route=state.get("route"), route_reason=state.get("route_reason"),
-                  classification=state.get("classification"), team=state.get("team"), language=state.get("language"))
+                  classification=state.get("classification"), team=state.get("team"), language=state.get("language"),
+                  route_rule=state.get("route_rule"), answer_tier=state.get("draft_mode"))
     g = state.get("guard", {})
     if not g.get("ok"):
         reason = "output guard: " + ", ".join(g.get("problems") or ["failed"])
@@ -221,17 +279,34 @@ def send(state, deps: Deps):
         deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], state.get("route_reason"))
         deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common)
         return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
-    if state.get("draft_mode") == "cache":
-        common["route_reason"] = f"{common.get('route_reason') or ''} (answered from the How-To cache)".strip()
+    tier = {"cache": "the How-To cache", "library": "approved How-To answers"}.get(state.get("draft_mode"))
+    if tier:
+        common["route_reason"] = f"{common.get('route_reason') or ''} (answered from {tier})".strip()
     sent_now = deps.store.insert_reply(state["ticket_id"], state["draft_version"], state["draft"], "chat")
     deps.store.save_progress(state["ticket_id"], agent_status="replied", **common)
     _cache_answer(state, deps)
+    _ask_support_to_write_it(state, deps)
     return {"sent": True, "meta": {**state.get("meta", {}), "sent_now": sent_now}, "steps": _step(state, "send")}
+
+
+def _ask_support_to_write_it(state, deps: Deps):
+    """Learning loop: the customer got a guide, not steps. Support writes the answer once; on approval the
+    customer gets it and it joins the library for every future asker. One open task per question."""
+    if not state.get("learn_kb") or not hasattr(deps.store, "create_review"):
+        return
+    q = _question(state)
+    for t in deps.store.list_reviews():
+        if t.get("kind") == "knowledge" and answer_library.similarity(q, t.get("body") or "") >= 0.75:
+            return
+    deps.store.create_review(
+        state["ticket_id"], state["draft_version"] + 1, "",
+        f"How-To knowledge: write the steps once (guide {state['learn_kb'][0]}); the customer gets them and every "
+        f"similar question is answered automatically from then on", kind="knowledge", kb_ids=state["learn_kb"])
 
 
 def _cache_answer(state, deps: Deps):
     """3. A How-To answer that passed the guard and was sent is kept for the next asker."""
-    if (deps.answer_cache is None or deps.retriever is None or state.get("team") != "How-To"
+    if (deps.answer_cache is None or deps.retriever is None or not state.get("howto")
             or state.get("draft_mode") not in ("model", "fallback")):
         return
     src = state.get("sources") or {}

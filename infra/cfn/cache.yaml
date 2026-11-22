@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Paynest phase 10 - ElastiCache for Valkey: the How-To answer cache (and the app's other Redis
+  uses), replacing Upstash so the cache stays in the VPC and in-region. One small node, TLS in
+  transit, KMS at rest, reachable only from the app server. Create on test/demo days and delete
+  after; the app treats a missing cache as a miss.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  # The cache lives in the two PRIVATE subnets, like the database.
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      CacheSubnetGroupName: !Sub "${Project}-${Env}-cache"
+      Description: !Sub "${Project}-${Env} private subnets for the answer cache"
+      SubnetIds: !Split
+        - ","
+        - !ImportValue
+          Fn::Sub: "${Project}-${Env}-PrivateSubnetIds"
+
+  # Only the app server's security group may connect, and only on the Valkey port.
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${Project}-${Env} answer cache: Valkey 6379 from the app server only"
+      VpcId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !ImportValue
+            Fn::Sub: "${Project}-${Env}-Ec2SecurityGroupId"
+          Description: Valkey from the app server
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 127.0.0.1/32
+          Description: No outbound traffic needed
+      Tags:
+        - { Key: Name, Value: !Sub "${Project}-${Env}-cache-sg" }
+
+  Cache:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId: !Sub "${Project}-${Env}-cache"
+      ReplicationGroupDescription: !Sub "${Project}-${Env} How-To answer cache (Valkey)"
+      Engine: valkey
+      EngineVersion: "8.0"
+      CacheNodeType: cache.t4g.micro
+      NumCacheClusters: 1                 # demo: one node; a replica adds failover in production
+      AutomaticFailoverEnabled: false
+      TransitEncryptionEnabled: true      # rediss:// only
+      AtRestEncryptionEnabled: true
+      KmsKeyId: !ImportValue
+        Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      SecurityGroupIds: [!Ref CacheSecurityGroup]
+      SnapshotRetentionLimit: 0           # a cache: nothing worth keeping
+      Tags:
+        - { Key: Project, Value: !Ref Project }
+        - { Key: Env, Value: !Ref Env }
+
+Outputs:
+  CacheEndpoint:
+    Value: !GetAtt Cache.PrimaryEndPoint.Address
+  RedisUrl:
+    Description: Put this in .env as REDIS_URL, then run scripts\put_secrets.ps1 and restart the app.
+    Value: !Sub "rediss://${Cache.PrimaryEndPoint.Address}:${Cache.PrimaryEndPoint.Port}/0"

@@ -104,9 +104,18 @@ def expand(text: str) -> str:
 
 
 class Retriever:
-    def __init__(self, chunks: list[dict], rules: list[dict] | None = None, k1: float = 1.4, b: float = 0.75):
+    def __init__(self, chunks: list[dict], rules: list[dict] | None = None, k1: float = 1.4, b: float = 0.75,
+                 examples: list[dict] | None = None):
+        titles = {c["kb_id"]: c for c in chunks if c.get("source_kind") == "kb_title" and c.get("kb_id")}
+        # Past customer questions an agent solved with a KB article: customers' own words for each guide.
+        example_chunks = [
+            {"chunk_id": f"{e['kb_id']}#example{i}", "kb_id": e["kb_id"], "source_kind": "resolved_example",
+             "region": titles[e["kb_id"]]["region"], "topic": titles[e["kb_id"]].get("topic"),
+             "title": titles[e["kb_id"]]["title"], "content": e["question"][:600]}
+            for i, e in enumerate(examples or []) if e.get("kb_id") in titles and e.get("question")
+        ]
         self.chunks = [dict(c, effective_from=_opt(c.get("effective_from")), effective_to=_opt(c.get("effective_to")))
-                       for c in chunks]
+                       for c in [*chunks, *example_chunks]]
         self.rules = [dict(r, effective_from=_as_date(r["effective_from"])) for r in (rules or [])]
         self.docs = [words(f"{c.get('title') or ''} {c.get('topic') or ''} {c['content']}") for c in self.chunks]
         self.grams = [trigrams(f"{c.get('title') or ''} {c['content']}") for c in self.chunks]
@@ -115,7 +124,8 @@ class Retriever:
         n = len(self.docs)
         self.idf = {w: math.log(1 + (n - f + 0.5) / (f + 0.5)) for w, f in df.items()}
         self.k1, self.b = k1, b
-        sig = sorted(f"{c['chunk_id']}|{c.get('effective_from')}|{c.get('effective_to')}" for c in self.chunks)
+        sig = sorted(f"{c['chunk_id']}|{c.get('effective_from')}|{c.get('effective_to')}" for c in self.chunks
+                     if c["source_kind"] != "resolved_example")
         self.version = __import__("hashlib").sha256("\n".join(sig).encode()).hexdigest()[:12]  # KB version
 
     def _bm25(self, q: list[str], i: int) -> float:
@@ -149,6 +159,43 @@ class Retriever:
             hits.append({**_public(c), "score": round(score, 3)})
         hits.sort(key=lambda h: (-h["score"], h["chunk_id"]))
         return hits[:k]
+
+
+    def howto_articles(self, text: str, region: str | None, as_of: date, k: int = 3,
+                       with_excerpts: bool = False) -> list[dict]:
+        """The KB articles that answer a how-to question, best first.
+
+        An article scores by its title/excerpt and by past customer questions it solved; the hit
+        returned is the article's title chunk (plus its excerpt text when the excerpt is real and
+        valid on the date), with `solved` = how many similar past questions it resolved.
+        Excerpts are off by default: the only real ones are statutory (PF, WPS), which auto-sent
+        replies must never quote.
+        """
+        hits = self.search(text, region, as_of, k=40,
+                           kinds=("kb_title", "kb_excerpt", "kb_article", "resolved_example"))
+        by_kb: dict[str, dict] = {}
+        for h in hits:
+            if str(h.get("topic") or "").startswith("statutory") and not with_excerpts:
+                continue  # imported statutory articles: human-review route only
+            kb = h.get("kb_id") or h["chunk_id"].split("#")[0]
+            a = by_kb.setdefault(kb, {"score": 0.0, "solved": 0, "excerpt": None, "steps": []})
+            a["score"] = max(a["score"], h["score"])
+            a["solved"] += h["source_kind"] == "resolved_example"
+            if h["source_kind"] == "kb_excerpt" and with_excerpts:
+                a["excerpt"] = h["content"]
+            if h["source_kind"] == "kb_article" and len(a["steps"]) < 2:
+                a["steps"].append(h["content"])  # imported article text, best-matching parts first
+        out = []
+        for kb, a in by_kb.items():
+            title = next((c for c in self.chunks if c["chunk_id"] == f"{kb}#title"), None)
+            if title is None:
+                continue
+            body = "\n".join([*(a["steps"]), *([a["excerpt"]] if a["excerpt"] else [])])
+            content = title["content"] + (f"\n{body}" if body else "")
+            out.append({**_public(title), "content": content, "score": round(a["score"] + 0.6 * min(a["solved"], 5), 3),
+                        "solved": a["solved"], "has_steps": bool(body), "steps": body})
+        out.sort(key=lambda h: (-h["score"], h["chunk_id"]))
+        return out[:k]
 
 
 def _opt(v):

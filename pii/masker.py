@@ -100,6 +100,12 @@ COMMON_CAPS = {
     "staff", "manager", "leave", "encashment", "gratuity", "provident", "fund", "income", "tax",
     "professional", "account", "bank", "transfer", "email", "mail", "call", "phone", "mobile",
     "reference", "ticket", "statement", "letter", "offer", "joining", "reimbursement", "arrears",
+    # Payce screens, menus and buttons (help articles and how-to questions: "Open Reports > Audit trail")
+    "open", "go", "click", "select", "choose", "pick", "save", "submit", "add", "edit", "delete", "remove",
+    "upload", "download", "export", "import", "settings", "reports", "report", "audit", "trail", "users",
+    "user", "roles", "role", "permissions", "dashboard", "home", "menu", "admin", "payslips", "employees",
+    "people", "policies", "policy", "attendance", "approvals", "approve", "run", "runs", "new", "next",
+    "back", "filter", "search", "view", "zip", "pdf", "csv", "excel", "integrations", "billing", "invoices",
     # places and calendar
     "india", "dubai", "abu", "dhabi", "sharjah", "uae", "emirates", "mumbai", "delhi", "bengaluru",
     "bangalore", "chennai", "pune", "hyderabad", "january", "february", "march", "april", "may",
