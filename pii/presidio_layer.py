@@ -31,6 +31,15 @@ NOT_PEOPLE = {
 }
 NOT_PEOPLE |= {"email", "mail", "call", "phone", "mobile", "account", "bank", "again", "other",
                "reference", "ticket", "leave", "employee", "manager", "statement", "letter", "contact"}
+# Payce screens, menus and buttons. spaCy tags a capitalised button name as a PERSON
+# ("choose Download as ZIP"), which turned help-article steps into "[name removed]".
+NOT_PEOPLE |= {
+    "open", "go", "click", "select", "choose", "pick", "save", "submit", "add", "edit", "delete", "remove",
+    "upload", "download", "export", "import", "settings", "reports", "report", "audit", "trail", "users",
+    "user", "roles", "role", "permissions", "dashboard", "home", "menu", "admin", "payslips", "employees",
+    "people", "policies", "policy", "attendance", "approvals", "approve", "run", "runs", "new", "next",
+    "back", "filter", "search", "view", "zip", "pdf", "csv", "excel", "integrations", "billing", "invoices",
+}
 
 _analyzer = None
 _tried = False

@@ -50,6 +50,13 @@ def test_ner_payroll_terms_and_acronyms_are_not_names(fake):
     assert mask_ticket(text).text == text.replace("a@b.com", "<EMAIL_1>")
 
 
+def test_ner_menu_and_button_words_are_not_names(fake):
+    # spaCy in CI tagged "Download" as a PERSON and broke imported help-article steps.
+    fake(["Download", "Open Payroll", "Select", "Reports"])
+    text = "1. Open Payroll > Payslips.\n2. Select all employees and choose Download as ZIP.\n3. Reports"
+    assert mask_ticket(text).text == text
+
+
 def test_same_tokens_with_and_without_presidio(fake):
     for t in SEED:
         presidio_layer.set_analyzer(None)
