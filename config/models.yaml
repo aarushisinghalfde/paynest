@@ -23,6 +23,13 @@ providers:
       apac.amazon.nova-micro-v1:0: {in: 0.000035, out: 0.00014}
       apac.amazon.nova-pro-v1:0: {in: 0.0008, out: 0.0032}
 
+  agentcore:
+    # Phase E: the model steps run on a Bedrock AgentCore Runtime in Sydney (agent/agentcore_app.py,
+    # infra/cfn/agentcore.yaml), which calls its own backend (openrouter today, bedrock later).
+    region: ap-southeast-2
+    runtime_arn_env: AGENTCORE_RUNTIME_ARN
+    ladder: []
+
 budget:
   daily_usd_cap: 0.50
 

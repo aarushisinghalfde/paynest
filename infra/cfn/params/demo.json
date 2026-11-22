@@ -5,6 +5,7 @@
     "VpcCidr": "10.20.0.0/16",
     "CloudFrontPrefixListId": "auto:cloudfront",
     "OriginDomain": "auto:ec2-dns",
-    "Ec2PrivateIp": "auto:ec2-private-ip"
+    "Ec2PrivateIp": "auto:ec2-private-ip",
+    "ImageTag": "auto:latest-tag"
   }
 }

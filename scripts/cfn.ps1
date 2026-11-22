@@ -107,6 +107,13 @@ function Resolve-ParamValue {
     Write-Host "EC2 private IP in ${region}: $ip" -ForegroundColor DarkGray
     return $ip
   }
+  if ($Value -eq "auto:latest-tag") {
+    # The latest released version (git tag), e.g. for the AgentCore runtime image.
+    $tag = (git describe --tags --abbrev=0 2>$null)
+    if (-not $tag) { throw "No git tag found. Release first with .\scripts\deploy.ps1 vX.Y.Z." }
+    Write-Host "Latest release tag: $tag" -ForegroundColor DarkGray
+    return $tag.Trim()
+  }
   return $Value
 }
 

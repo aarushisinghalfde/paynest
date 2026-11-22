@@ -1,12 +1,14 @@
 # Paynest architecture
 
-Status as of **20 Nov 2026, night**: phases 0-7 **live in Sydney** at
-https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com (gates: phase 3 12/12, phase 4 all
-pass, phase 5 4/4); phases 8-9 and the How-To conversation flow in code and released as
-v0.4.2. This file describes what is built, what is planned, and why. Diagrams are Mermaid and
-render on GitHub. Companion docs: [PRD](paynest_PRD.md), [discovery note](paynest_Discovery_Note.md),
+Status as of **23 Nov 2026**: phases 0-9 and plan v2 phases A-D **live in Sydney** at
+https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com (v0.8.0, every live gate passing:
+data 8/8, chat 8/8, dashboard, knowledge import, phases 6/7/9 5/5). Built and released with the
+next version: the support-head console (G), the faithfulness check (C2), the Bedrock client, and
+the AgentCore runtime for the model steps (E). What waits on infrastructure approval or AWS:
+section 11. This file describes what is built and why. Diagrams are Mermaid and render on GitHub.
+Companion docs: [operate](operate.md), [PRD](paynest_PRD.md), [discovery note](paynest_Discovery_Note.md),
 [SPIN sheet](paynest_SPIN_Sheet.md), [solution approach](solution_approach.md), [LLD](lld.md),
-[build note](build_note.md), [presentation](Payce_Support_Assist_build_review.pptx).
+[build note](build_note.md), [plan v2](plan_v2.md), [presentation](Payce_Support_Assist_build_review.pptx).
 
 Paynest (Payce Support Assist) is a support-ticket assistant for a payroll provider with
 India and UAE tenants. Every ticket is PII-masked first, classified and routed by rules,
@@ -362,6 +364,50 @@ flowchart LR
 
 ---
 
+### Support-head console (plan v2 phase G, `agent/console.py`, `web/src/pages/Console.jsx`)
+
+The lead's view of the agent, read-only with `LEAD_TOKEN` (admins use `ADMIN_TOKEN`; only admins
+decide reviews or import knowledge). Masked data only.
+
+- **Decision record** (`agent/decision.py`, `tickets.decision`): written at `send` for every ticket.
+  Classification (team, confidence, branch, which layer decided, runner-up), merges (duplicate,
+  incident, Jira), the rule that fired and why, how the answer was found (approved library and
+  its match, answer cache and its match, the top 5 retrieved sources with relevance and whether
+  they had steps, tool facts), the 12 output checks passed and failed, and whether the fixed
+  wording replaced a model draft. Ids, scores and names only, no ticket text.
+- **Six buckets, each ticket in exactly one**: resolved by the agent (an answer was sent, not an
+  acknowledgement), waiting for approval, approved by a person (as is or edited), with a person
+  (team queue, blocked, rejected), merged, conversation only. The overview adds up to the ticket
+  count; the console gate checks it.
+- **Trust signals**: approved as is / edited / rejected per review (`review_tasks.proposed_draft`
+  vs what was sent), minutes to decide, the customer's "did this solve it?", per confidence band.
+- **English for the lead** (`agent/translate.py`): Arabic, Hindi and Hinglish question and reply,
+  translated on first open and stored. Every `<TOKEN_n>`, citation and number must come back
+  identical, or the translation is rejected and the console says so. Labelled machine translation.
+- **Ticket timeline**: question (+ English), classification, merge, rule, answer path, checks,
+  the reviewer's edit as a before/after, what the customer saw, their feedback.
+
+### Model steps on AgentCore (plan v2 phase E, `agent/agentcore_app.py`, `infra/cfn/agentcore.yaml`)
+
+The graph, database, PII vault and queue stay on the app server; only the **model steps**
+(classify, draft, translate, judge) run on a Bedrock AgentCore Runtime. What reaches it is what
+already reaches a model: masked text and masked sources. So the runtime runs in PUBLIC network
+mode (no VPC, no NAT bill), its role can read only the model key and call models, and it can be
+versioned and switched (OpenRouter now, Bedrock models once the account hold is lifted) without
+touching the agent. The app server uses it with `MODEL_PROVIDER=agentcore` (SSM), signed by its
+instance role; any failure falls back exactly like a model error (fixed wording, or a person).
+
+```mermaid
+flowchart LR
+  W[worker: ticket graph] -->|masked text + sources| P{MODEL_PROVIDER}
+  P -->|openrouter| OR[OpenRouter]
+  P -->|bedrock| BR[Bedrock Converse, Sydney]
+  P -->|agentcore| AC[AgentCore Runtime: model steps] --> OR
+  AC -.->|Backend=bedrock| BR
+  W --> DB[(RDS, vault, SQS: never leave the VPC)]
+```
+
+
 ## 6. Release flow (images)
 
 ```mermaid
@@ -439,6 +485,16 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | 20 Nov | **Load all operational data, none of the discovery material** | The agent needs tickets, conversations, Jira, SLA and KB; transcripts and emails add staff PII and no agent value. |
 | 20 Nov | **Loader on the EC2 via presigned URLs** | The EC2 role keeps no access to `raw/`; you grant a 15-minute read per run. Portal upload (with admin login) proposed as phase 4b. |
 | 20 Nov | **AgentCore** Gateway + Policy + Observability in phases 5 to 7 | Managed tools and deterministic tool-call rules (tenant isolation). Runtime (zip deployment) under consideration for the agent. |
+| 22 Nov | **Statutory figures always go to a person**, whatever the classifier says | Eval: a Hindi PF-ceiling and an Arabic gratuity question were answered automatically. |
+| 22 Nov | **Incidents match on subject + symptom across wordings and languages**; "following up" counts as a resubmit only about our own ticket | Meridian burst: 2 incidents -> 1; dedupe precision 93% -> 100%. |
+| 22 Nov | **A model draft that fails the output checks falls back to the fixed wording** from the same sources | The customer gets an answer instead of silence; a person only when both fail. |
+| 22 Nov | **One-command release waits for both images in ECR and for /api/health to report the version** | Restarting before the build finished ran the previous `:latest`. |
+| 22 Nov | **Traces: one per ticket, ADOT collector on the server -> X-Ray** | Debug a ticket end to end; spans carry ids and timings, never text. |
+| 23 Nov | **Support-head console inside the existing web app, read-only lead token** | The lead needs outcomes, confidence and "why", not the chat; no second app to run. |
+| 23 Nov | **Translation on first open, numbers and tokens verified** | Pay only for tickets someone reads; a translation never changes a figure. |
+| 23 Nov | **AgentCore hosts the model steps only (PUBLIC mode), not the whole app** | No database credentials or VPC access in the runtime; same masked-text boundary as today. Our design, chosen over moving the full app into a VPC-mode runtime. |
+| 23 Nov | **Bedrock client built ahead of access** (Converse + instance role, Nova; optional cross-account role) | The account returns "Operation not allowed" for every model; switching is `MODEL_PROVIDER` / config once AWS lifts it. |
+| 23 Nov | **Faithfulness judged only on model drafts, a claim counts only with a source the drafter had** | Fixed-wording drafts are faithful by construction; a judge must not "support" claims from its own knowledge. |
 
 ---
 
@@ -452,11 +508,13 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | Show outputs / failures | `.\scripts\cfn.ps1 output <stack>`, `.\scripts\cfn.ps1 events <stack>` |
 | Delete a stack (asks for its name) | `.\scripts\cfn.ps1 delete <stack>` |
 | Store secrets from `.env` in SSM | `.\scripts\put_secrets.ps1` |
-| Release images | `git tag v0.x.y` then `git push origin v0.x.y` |
+| Release (tag, wait for images, restart, every gate) | `.\scripts\deploy.ps1 v0.x.y` |
+| Re-run all gates | `.\scripts\run_checks.ps1` (`-Restart` to restart first) |
+| Evals (local) | `python scripts\run_evals.py --record` (`--with-model` adds faithfulness) |
 | Start / stop / check EC2 + RDS | `.\scripts\demo.ps1 start`, `stop`, `status` |
 | Run locally | `docker compose up -d --build --wait` (see README) |
 
-Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observability`, `ec2`, `apigw` (or `cloudfront` once allowed). Delete in reverse.
+Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observability`, `ec2`, `apigw` (or `cloudfront` once allowed); optional `cache`, `agentcore`. Delete in reverse. Day-to-day operations: [operate.md](operate.md).
 
 | Phase 3 task | Command |
 | --- | --- |
@@ -468,16 +526,22 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observabili
 
 ## 11. What is next
 
-1. Done: phases 0-7 live (v0.3.0); phases 8-9, the How-To conversation flow and Arabic/Hindi
-   answers released as v0.4.2. Live check: `python scripts\check_chat.py` (8 cases).
-2. Phase 10: `cache` stack (ElastiCache Valkey, created only for demo days) to replace Upstash
-   for the answer cache; portal upload page for new data (admin login).
-3. Phase 11: `deploy.ps1` (tag -> wait for images -> restart -> health -> checks), X-Ray via an
-   ADOT collector, AgentCore runtime/gateway/policy.
-4. Phase 12: full evals on the relabelled 200-ticket set (`scripts/model_fit.py --record`, replay).
-5. Phase 13: demo script and handover.
-6. Known gaps: dedupe precision 93% (target 95%); the Meridian burst opened 2 incidents, not 1;
-   PNJ-4412 matched 16 of 48 tickets.
+Done (plan v2): A dashboard, B knowledge import, C evals and quality fixes, D release and traces,
+G support-head console, C2 faithfulness check, Bedrock client, E AgentCore model steps, F this
+handover. Waiting on approval or AWS:
 
-Open items: alarm email; Bedrock/CloudFront account verification; delete the failed cloudfront
-stack; `demo.ps1 stop` when idle.
+1. **Release** the console, Bedrock client and runtime image: `.\scripts\deploy.ps1 v0.9.0`
+   (migration 010 runs on start). Add `LEAD_TOKEN` to `.env`, then `.\scripts\put_secrets.ps1`.
+2. **Infra** (your approval): `cfn.ps1 plan/apply iam` (traces, Bedrock, AgentCore invoke
+   permissions), `ec2` (trace collector; the instance restarts), then `check_traces.py`.
+   `agentcore` stack, then `check_agentcore.py`, then `MODEL_PROVIDER=agentcore` to use it.
+   Optional `cache` + `use_cache.ps1 valkey`.
+3. **Bedrock**: AWS Support reply sent for "Operation not allowed" on account 665651551863.
+   When `check_bedrock.py` passes, set `MODEL_PROVIDER=bedrock` (or `Backend=bedrock` on the
+   runtime) and drop OpenRouter.
+4. **Faithfulness score**: `python scripts\run_evals.py --with-model --record`.
+5. Not doing: India/UAE deployment (placeholders), write actions on the payroll engine,
+   training models on ticket data.
+
+Open items: alarm email; CloudFront account verification; delete the failed cloudfront stack;
+`demo.ps1 stop` when idle.

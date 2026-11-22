@@ -99,6 +99,12 @@ Resources:
                 Effect: Allow
                 Action: sts:AssumeRole
                 Resource: !Sub "arn:${AWS::Partition}:iam::*:role/paynest-bedrock-*"
+              - Sid: ModelStepsRuntime  # phase E: MODEL_PROVIDER=agentcore calls the model-steps runtime
+                Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${Project}_${Env}_model_steps-*"
+                  - !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${Project}_${Env}_model_steps-*/runtime-endpoint/*"
               - Sid: WriteTraces        # phase D: the ADOT collector sends spans to X-Ray
                 Effect: Allow
                 Action:

@@ -15,15 +15,17 @@
 
 **Not doing:** India/UAE deployment, write actions on the payroll engine, training models on ticket data.
 
-## Status (22 Nov 2026)
+## Status (23 Nov 2026)
 
 | Phase | Status |
 |---|---|
-| A. Dashboard | Live gate PASS (v0.7.3) |
-| B. Knowledge import | Live gate PASS (v0.7.3) |
-| C. Evals + phase 7 gaps | Local gates PASS: classify 100% on the labelled set (99.2% time split), statutory 0 auto, guard 200/200, dedupe 100%, Meridian 1 incident. Live gates for 6/7/9 in `check_agent_live.py` (run with the next release) |
-| D. Operate | Built: `deploy.ps1`, X-Ray traces (collector + IAM, needs `cfn.ps1` apply of iam and ec2), Valkey switch (`use_cache.ps1`, needs the cache stack). Gates: release run, `check_traces.py`, `use_cache.ps1 valkey` |
-| E. AgentCore | Not started |
-| F. Handover | Not started |
+| A. Dashboard | Live PASS (v0.8.0) |
+| B. Knowledge import | Live PASS (v0.8.0) |
+| C. Evals + phase 7 gaps | Live 6/7/9 gates 5/5; local evals PASS. C2 faithfulness built (`--with-model`) |
+| D. Operate | `deploy.ps1` live; traces and Valkey switch built, waiting for `cfn.ps1` apply |
+| G. Support-head console | Built (decision record, buckets, trust signals, translation, lead token); ships in v0.9.0 |
+| E. AgentCore | Model-steps runtime + stack + check built; waiting for release and `cfn.ps1 apply agentcore` |
+| F. Handover | architecture.md, operate.md updated |
+| Bedrock | Client built; account returns "Operation not allowed" for every model, AWS Support case open |
 
-Details: [operate.md](operate.md).
+Details: [operate.md](operate.md), [architecture.md](architecture.md) section 11.

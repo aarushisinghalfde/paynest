@@ -76,3 +76,34 @@ In the console: X-Ray > Traces, filter `annotation.ticket_id = "<ticket id>"`.
 
 `.\scripts\demo.ps1 stop` stops EC2 and RDS (storage and the Elastic IP still bill a little);
 `start` brings them back. Delete the cache stack when not demoing (after `use_cache.ps1 upstash`).
+
+## Support-head console (phase G)
+
+`/dashboard` in the web app, tabs Overview / Tickets / Agent analytics / Q3 history. Give the lead
+`LEAD_TOKEN` (read-only: no review decisions, no knowledge import): add it to `.env`, then
+`.\scripts\put_secrets.ps1` and a restart. Gates are in `check_dashboard.py` (buckets add up,
+decision records present, Arabic ticket translated with numbers intact, lead is read-only).
+
+## Models: OpenRouter, Bedrock, AgentCore
+
+`MODEL_PROVIDER` in SSM (`/paynest/demo/MODEL_PROVIDER`, then restart) picks the provider without
+a release; without it, `config/models.yaml` decides (openrouter).
+
+```powershell
+aws ssm put-parameter --region ap-southeast-2 --name /paynest/demo/MODEL_PROVIDER --type String --value agentcore --overwrite
+```
+
+| Value | Needs | Check |
+|---|---|---|
+| `openrouter` | `OPENROUTER_API_KEY` (today) | `check_chat.py` |
+| `bedrock` | the account hold lifted, `cfn.ps1 apply iam` | `check_bedrock.py`, then `check_chat.py` |
+| `agentcore` | `cfn.ps1 plan/apply agentcore` (uses your latest release tag), `apply iam` | `check_agentcore.py`, then `check_chat.py` |
+
+The AgentCore runtime only runs the model steps on masked text (PUBLIC mode, no database access).
+After each release, `cfn.ps1 plan agentcore` / `apply` rolls it to the new image.
+
+## Faithfulness (C2)
+
+`python scripts\run_evals.py --with-model --record`: drafts the labelled set with the model
+(masked text, capped at USD 1) and has a judge check each claim against the sources the drafter
+had. Gate: at least 90% of claims supported. Model-judged, so read it as indicative.

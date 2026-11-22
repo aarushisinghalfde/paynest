@@ -102,17 +102,26 @@ def _post(url, payload, key, timeout=30):
 
 class ModelClient:
     def __init__(
-        self, ledger=None, transport=_post, cap_usd: float | None = None, api_key: str | None = None
+        self, ledger=None, transport=_post, cap_usd: float | None = None, api_key: str | None = None,
+        provider: str | None = None,
     ):
         cfg = config()
-        self.provider = cfg["provider"]
+        # MODEL_PROVIDER (SSM /paynest/demo, read at start) switches provider without a release
+        self.provider = provider or os.environ.get("MODEL_PROVIDER") or cfg["provider"]
         p = cfg["providers"][self.provider]
         self.ladder = p["ladder"]
         self.base_url = p.get("base_url")
         self.prices = p.get("prices") or {}
         self.region = p.get("region")
         self.role_arn = os.environ.get("BEDROCK_ROLE_ARN", "") if self.provider == "bedrock" else ""
-        if self.provider == "bedrock":
+        if self.provider == "agentcore":
+            # the model steps run on AgentCore (agent/agentcore_app.py); rungs pass through to its backend
+            self.runtime_arn = os.environ.get(p.get("runtime_arn_env", "AGENTCORE_RUNTIME_ARN"), "")
+            self.key = "iam" if self.runtime_arn else ""
+            self.ladder = self.ladder or ["agentcore"]
+            if transport is _post:
+                transport = _agentcore_transport(self.region, self.runtime_arn)
+        elif self.provider == "bedrock":
             # no key: the instance (or cross-account) role signs each call; "iam" marks the client usable
             self.key = "iam" if self.ladder else ""
             if transport is _post:
@@ -138,6 +147,8 @@ class ModelClient:
         if not self.key:
             raise ModelError("no API key for the model provider")
         model = self.ladder[min(rung, len(self.ladder) - 1)]
+        if self.provider == "agentcore":
+            return self._agentcore(rung, system, user, purpose, ticket_id, route, max_tokens)
         if self.provider == "bedrock":
             return self._bedrock(model, rung, system, user, purpose, ticket_id, route, max_tokens)
         payload = {
@@ -175,6 +186,25 @@ class ModelClient:
             data, model, rung, usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0, cost, ms
         )
 
+    def _agentcore(self, rung, system, user, purpose, ticket_id, route, max_tokens) -> Result:
+        t0 = time.perf_counter()
+        try:
+            out = self.transport({"system": system, "user": user, "rung": rung, "purpose": purpose,
+                                  "max_tokens": max_tokens})
+        except ModelError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - throttling, access, network: the caller falls back
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code", type(exc).__name__)
+            raise ModelError(f"agentcore call failed: {code}") from None
+        ms = (time.perf_counter() - t0) * 1000
+        cost = float(out.get("cost_usd") or 0.0)
+        model = f"agentcore:{out.get('model')}"
+        self.ledger.record(ticket_id=ticket_id, purpose=purpose, route=route, model_id=model, rung=rung,
+                           tokens_in=out.get("tokens_in"), tokens_out=out.get("tokens_out"), cost_usd=cost)
+        if not isinstance(out.get("data"), dict):
+            raise ModelError("agentcore response had no JSON data")
+        return Result(out["data"], model, rung, out.get("tokens_in") or 0, out.get("tokens_out") or 0, cost, ms)
+
     def _bedrock(self, model, rung, system, user, purpose, ticket_id, route, max_tokens) -> Result:
         t0 = time.perf_counter()
         try:
@@ -197,13 +227,38 @@ class ModelClient:
         return Result(data, model, rung, tin, tout, cost, ms)
 
 
+def _agentcore_transport(region: str, runtime_arn: str):
+    """bedrock-agentcore InvokeAgentRuntime, signed by the instance role. One session id per call:
+    the model steps are stateless, so no session state is kept between tickets."""
+    import uuid
+
+    state = {"client": None}
+
+    def call(payload: dict) -> dict:
+        if state["client"] is None:
+            import boto3
+
+            state["client"] = boto3.client("bedrock-agentcore", region_name=region)
+        r = state["client"].invoke_agent_runtime(agentRuntimeArn=runtime_arn, qualifier="DEFAULT",
+                                                 runtimeSessionId=f"paynest-{uuid.uuid4().hex}",
+                                                 contentType="application/json", accept="application/json",
+                                                 payload=json.dumps(payload).encode())
+        body = r["response"].read() if hasattr(r["response"], "read") else r["response"]
+        out = json.loads(body)
+        if r.get("statusCode", 200) >= 400 or "error" in out or "detail" in out:
+            raise ModelError(f"agentcore: {out.get('error') or out.get('detail')}")
+        return out
+
+    return call
+
+
 def _converse_transport(region: str, role_arn: str = ""):
     """bedrock-runtime Converse, signed by the instance role, or by a cross-account role (refreshed hourly)."""
-    import boto3
-
     state = {"client": None, "expires": 0.0}
 
     def client():
+        import boto3
+
         if state["client"] is not None and time.time() < state["expires"]:
             return state["client"]
         if role_arn:

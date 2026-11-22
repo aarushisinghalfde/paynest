@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Paynest phase E - the agent's model steps (classify, draft, translate, judge) on a Bedrock
+  AgentCore Runtime in Sydney. Masked text only crosses to it; the ticket graph, database, PII
+  vault and queue stay on the app server. PUBLIC network mode: the runtime needs no VPC access
+  (no NAT), because it never touches the database. Leaves the unrelated kioskClassDemo alone.
+
+Parameters:
+  Project:
+    Type: String
+    Default: paynest
+  Env:
+    Type: String
+    AllowedValues: [demo, india, uae]
+  Deployable:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ImageTag:
+    Type: String
+    Description: The released app image (vX.Y.Z); cfn.ps1 fills in your latest git tag. A new tag rolls the runtime.
+    AllowedPattern: "^v\\d+\\.\\d+\\.\\d+$"
+    Default: v0.0.0
+  Backend:
+    Type: String
+    Description: Which model provider the runtime calls (bedrock once the account hold is lifted)
+    AllowedValues: [openrouter, bedrock]
+    Default: openrouter
+
+Rules:
+  OnlyDeployableEnvironments:
+    Assertions:
+      - Assert: !Equals [!Ref Deployable, "true"]
+        AssertDescription: This environment is a placeholder and must not be deployed. Only params/demo.json is deployable.
+
+Resources:
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Project}-${Env}-agentcore-runtime"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: bedrock-agentcore.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { "aws:SourceAccount": !Ref AWS::AccountId }
+      Policies:
+        - PolicyName: model-steps
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: PullImage
+                Effect: Allow
+                Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
+                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${Project}-${Env}/app"
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: Logs
+                Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*"
+              - Sid: Telemetry
+                Effect: Allow
+                Action: [xray:PutTraceSegments, xray:PutTelemetryRecords, cloudwatch:PutMetricData]
+                Resource: "*"
+              - Sid: ModelKeyOnly        # the provider key, and nothing else under /paynest/demo
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Project}/${Env}/OPENROUTER_API_KEY"
+              - Sid: DecryptModelKey
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "${Project}-${Env}-KmsKeyArn"
+              - Sid: BedrockModels       # for Backend=bedrock
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+
+  Runtime:
+    Type: AWS::BedrockAgentCore::Runtime
+    Properties:
+      AgentRuntimeName: !Sub "${Project}_${Env}_model_steps"
+      Description: Payce support agent - model steps on masked text (classify, draft, translate, judge)
+      RoleArn: !GetAtt RuntimeRole.Arn
+      AgentRuntimeArtifact:
+        ContainerConfiguration:
+          ContainerUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Project}-${Env}/app:${ImageTag}"
+      NetworkConfiguration:
+        NetworkMode: PUBLIC
+      ProtocolConfiguration: HTTP
+      EnvironmentVariables:
+        AGENTCORE_BACKEND: !Ref Backend
+        MODEL_KEY_PARAM: !Sub "/${Project}/${Env}/OPENROUTER_API_KEY"
+        APP_VERSION: !Ref ImageTag
+
+  # The app server reads /paynest/demo/* at start: the ARN lands in its environment. Using the
+  # runtime is a separate, explicit switch: MODEL_PROVIDER=agentcore (docs/operate.md).
+  RuntimeArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Project}/${Env}/AGENTCORE_RUNTIME_ARN"
+      Type: String
+      Value: !GetAtt Runtime.AgentRuntimeArn
+      Description: The model-steps runtime; set MODEL_PROVIDER=agentcore to use it
+
+Outputs:
+  RuntimeArn:
+    Value: !GetAtt Runtime.AgentRuntimeArn
+    Export: { Name: !Sub "${Project}-${Env}-AgentCoreRuntimeArn" }
