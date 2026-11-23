@@ -1,19 +1,20 @@
 # Paynest architecture
 
-Status as of **23 Nov 2026**: phases 0-9 and plan v2 phases A-D **live in Sydney** at
-https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com (v0.8.0, every live gate passing:
-data 8/8, chat 8/8, dashboard, knowledge import, phases 6/7/9 5/5). Built and released with the
-next version: the support-head console (G), the faithfulness check (C2), the Bedrock client, and
-the AgentCore runtime for the model steps (E). What waits on infrastructure approval or AWS:
-section 11. This file describes what is built and why. Diagrams are Mermaid and render on GitHub.
+Status as of **23 Nov 2026, evening**: live in Sydney at
+https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com (v0.9.12). Since v0.9.0: the decision
+policy (money and personal data always go to a person, section 12), SLA priority and deadlines per
+ticket (section 13), the reviewer learning loop (section 14), demo How-To guides, one design for every
+page, the client and FDE views of the control room, and the workload eval (section 15). What waits
+on AWS or the client: section 11. This file describes what is built and why. Diagrams are Mermaid.
 Companion docs: [operate](operate.md), [PRD](paynest_PRD.md), [discovery note](paynest_Discovery_Note.md),
 [SPIN sheet](paynest_SPIN_Sheet.md), [solution approach](solution_approach.md), [LLD](lld.md),
 [build note](build_note.md), [plan v2](plan_v2.md), [presentation](Payce_Support_Assist_build_review.pptx).
 
 Paynest (Payce Support Assist) is a support-ticket assistant for a payroll provider with
-India and UAE tenants. Every ticket is PII-masked first, classified and routed by rules,
-answered from approved sources, checked by an output guard, and sent to a human reviewer
-when the answer is statutory.
+India and UAE tenants. Every ticket is PII-masked first, classified, given a priority and an SLA
+deadline, and routed by rules. The agent answers information questions itself from approved guides;
+statutory answers are drafted for a person to approve; anything that moves money or touches personal
+data is handed to a person. Every reply passes the output guard (15 checks) before it is sent.
 
 ---
 
@@ -510,7 +511,11 @@ EC2 and RDS are started only for work sessions and demos (start/stop scripts pla
 | Store secrets from `.env` in SSM | `.\scripts\put_secrets.ps1` |
 | Release (tag, wait for images, restart, every gate) | `.\scripts\deploy.ps1 v0.x.y` |
 | Re-run all gates | `.\scripts\run_checks.ps1` (`-Restart` to restart first) |
+| Checks before a push (ruff, pytest, web build) | `.\scripts\precheck.ps1` (deploy runs it first; tags only after CI is green) |
 | Evals (local) | `python scripts\run_evals.py --record` (`--with-model` adds faithfulness) |
+| Workload eval (the 30% headcount question) | `python scripts\workload_eval.py --record` |
+| Clear the demo's live traffic (snapshot first, asks for RESET) | `python scripts\reset_demo.py` |
+| Send real masked Q3 questions through the live chat | `python scripts\seed_live.py` (`--n 200` for all) |
 | Start / stop / check EC2 + RDS | `.\scripts\demo.ps1 start`, `stop`, `status` |
 | Run locally | `docker compose up -d --build --wait` (see README) |
 
@@ -526,27 +531,28 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observabili
 
 ## 11. What is next
 
-Done (plan v2): A dashboard, B knowledge import, C evals and quality fixes, D release and traces,
-G support-head console, C2 faithfulness check, Bedrock client, E AgentCore model steps, F this
-handover. Waiting on approval or AWS:
+Done: plan v2 A-G, the decision policy, SLA per ticket, the learning loop, demo guides, the client
+and FDE control room, the workload eval. Next, by impact on the 30% headcount goal (section 15):
 
-1. **Release** the console, Bedrock client and runtime image: `.\scripts\deploy.ps1 v0.9.0`
-   (migration 010 runs on start). Add `LEAD_TOKEN` to `.env`, then `.\scripts\put_secrets.ps1`.
-2. **Infra** (your approval): `cfn.ps1 plan/apply iam` (traces, Bedrock, AgentCore invoke
-   permissions), `ec2` (trace collector; the instance restarts), then `check_traces.py`.
-   `agentcore` stack, then `check_agentcore.py`, then `MODEL_PROVIDER=agentcore` to use it.
-   Optional `cache` + `use_cache.ps1 valkey`.
-3. **Bedrock**: AWS Support reply sent for "Operation not allowed" on account 665651551863.
-   When `check_bedrock.py` passes, set `MODEL_PROVIDER=bedrock` (or `Backend=bedrock` on the
-   runtime) and drop OpenRouter.
-4. **Faithfulness score**: `python scripts\run_evals.py --with-model --record`.
-5. Not doing: India/UAE deployment (placeholders), write actions on the payroll engine,
-   training models on ticket data.
+1. **Model-drafted replies for problem tickets** (Payroll, Integration, Leave, Access, Billing: about
+   half the Q3 volume, 0% automated today). The agent drafts from the payroll API, known issues and
+   similar past cases; a person approves. Needs a model: Bedrock (AWS Support case open for
+   "Operation not allowed" on 665651551863) or OpenRouter.
+2. **The client's Confluence articles (SUP-KB)**: the data room has guide titles only. Import them on
+   the Knowledge page; they replace the demo guides (`data/demo_guides`, illustrative menus).
+3. **Arabic and Hindi How-To answers**: need the model to translate the guide's steps.
+4. **Reopen tracking** (same customer, same question within 7 days) as the agent's real accuracy, and
+   the workload eval in the release gates.
+5. **SLA in the control room**: at-risk and breached tickets, USD credit exposure, "due soonest" order
+   (the data is on every ticket since v0.9.11; the view is not built yet).
+6. Not doing: India/UAE deployment (placeholders), write actions on the payroll engine, training
+   models on ticket data.
 
-Open items: alarm email; CloudFront account verification; delete the failed cloudfront stack;
-`demo.ps1 stop` when idle.
+Open items: alarm email; CloudFront account verification; `demo.ps1 stop` when idle.
 
-## What the agent may do on its own (decision policy)
+---
+
+## 12. What the agent may do on its own (decision policy)
 
 The agent resolves information questions itself and hands every request to *do* something with money or
 personal data to a person. What the customer asks for decides this, not only the team. Rules:
@@ -568,3 +574,67 @@ Every reply, whoever writes it, passes the output guard (15 checks) before it is
 must carry real steps or the guide's own link, and never ids, scores or masked contact lines.
 The amount in a reply is repeated in the customer's own words ("2 lakh"); the approver sees it
 normalised ("INR 200,000").
+
+**Who sees what in the control room** (one page, the token decides):
+
+| Token | Who | Sees |
+| --- | --- | --- |
+| `LEAD_TOKEN` | client support head | outcomes in plain words: category, confidence High/Medium/Low, the guide used, "passed all safety checks" |
+| `REVIEWER_TOKENS` | client reviewers | the same, plus approve, edit or reject |
+| `ADMIN_TOKEN` | FDE | everything, plus the Engineering tab (step timings, failures, model calls, X-Ray trace per ticket) and an "Engineering detail" fold on each ticket |
+
+Customers see none of it: the public ticket API returns status and replies only, and replies never
+carry article ids, scores, rule ids or masked contact lines (output guard).
+
+---
+
+## 13. Priority and SLA deadlines (MSA Schedule 3)
+
+Every ticket records who the customer is (name, tier, monthly fee), its priority, a respond-by and a
+resolve-by time, and the service credit a missed resolution target would cost. Terms:
+`config/sla.yaml` (template v3.2); code: `agent/sla.py`.
+
+| Priority | Contract definition | How the agent reads it |
+| --- | --- | --- |
+| P1 | payroll cannot run, pay late, a filing missed | "cannot run payroll", "salary not credited", "ECR due today", a blocked payment |
+| P2 | material error in payroll output, degraded module | "overtime doubled", "arrears not included", "net pay wrong", "page not loading" |
+| P3 | everything else | how-to, configuration, reports |
+
+The customer's own priority is never lowered silently. Example: an Enterprise P1 must be resolved in
+8 h; a miss costs 10% of the monthly fee (USD 420 for Kestrel), x1.5 past 16 h. Q3: 128 breaches cost
+USD 19,196; 50 of them were Enterprise P3 (how-to and configuration).
+
+---
+
+## 14. The learning loop: a person writes an answer once
+
+When no written guide covers a How-To question, the customer is told a person will reply, and support
+gets a task. What they write is:
+
+1. sent to that customer, and to every customer waiting on the same question (their tasks close);
+2. stored in the approved-answer library (near-identical questions get it at once);
+3. added to the guide itself (`<KB>#approved-<id>` in `kb_chunks`), so retrieval finds it for any
+   wording; the worker reloads within a minute, and re-importing the article keeps it.
+
+A guide is used only when its **own** title and text match the question (score >= 5) and it is clearly
+ahead of the next guide; past questions only add a small bonus, because their Q3 labels are noisy.
+Problem reports ("webhook not firing", "token returns 401") never get a setup guide: a person handles
+them. An approval with no text is refused, so no customer gets an empty message.
+
+---
+
+## 15. Can it carry 30% of the support workload? (`scripts/workload_eval.py`)
+
+The 200 labelled Q3 tickets through the real agent (no model: the floor), weighted by the real Q3
+mix (1,353 tickets) and by the handling time left for a person (resolved 5%, approve a ready draft
+35%, person does the work 85%; pessimistic 25% / 60%):
+
+| | Expected | Pessimistic | Q3 tickets no person touches |
+| --- | --- | --- | --- |
+| Day one (guides only) | 21% | 19% | ~13% |
+| After learning (each new How-To answered once) | 30% | 25% | 23% |
+
+How-To (31% of Q3) is largely covered; Statutory (9%) is drafted for approval; the problem tickets
+(about 50%) are not automated. The goal is reachable with section 11 items 1 and 2; it is not claimed
+until measured with the model on. An earlier figure of 45-54% counted wrong answers as resolved
+(problem reports given setup guides, wrong guides picked on noisy labels); those are fixed.
