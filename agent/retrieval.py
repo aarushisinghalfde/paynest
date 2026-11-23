@@ -124,6 +124,13 @@ class Retriever:
         n = len(self.docs)
         self.idf = {w: math.log(1 + (n - f + 0.5) / (f + 0.5)) for w, f in df.items()}
         self.k1, self.b = k1, b
+        # each guide's own text, so a chosen guide always brings its steps (a search's top hits can be all
+        # past questions: 796 of them in Q3, which pushed the article text out and made every guide "title
+        # only"). Steps a person wrote and approved (#approved-) come first.
+        self.articles: dict[str, list[str]] = {}
+        for c in sorted((c for c in self.chunks if c["source_kind"] == "kb_article" and c.get("kb_id")),
+                        key=lambda c: ("#approved-" not in c["chunk_id"], c["chunk_id"])):
+            self.articles.setdefault(c["kb_id"], []).append(c["content"])
         sig = sorted(f"{c['chunk_id']}|{c.get('effective_from')}|{c.get('effective_to')}" for c in self.chunks
                      if c["source_kind"] != "resolved_example")
         self.version = __import__("hashlib").sha256("\n".join(sig).encode()).hexdigest()[:12]  # KB version
@@ -185,15 +192,27 @@ class Retriever:
                 a["excerpt"] = h["content"]
             if h["source_kind"] == "kb_article" and len(a["steps"]) < 2:
                 a["steps"].append(h["content"])  # imported article text, best-matching parts first
+        # how well each guide's OWN title and text match, scored apart from past questions (which carry the
+        # client's noisy labels and can crowd the guide's own words out of the hits above)
+        own: dict[str, float] = {}
+        for h in self.search(text, region, as_of, k=40, kinds=("kb_title", "kb_article")):
+            kb = h.get("kb_id") or h["chunk_id"].split("#")[0]
+            own[kb] = max(own.get(kb, 0.0), h["score"])
         out = []
         for kb, a in by_kb.items():
             title = next((c for c in self.chunks if c["chunk_id"] == f"{kb}#title"), None)
             if title is None:
                 continue
-            body = "\n".join([*(a["steps"]), *([a["excerpt"]] if a["excerpt"] else [])])
+            steps = a["steps"] or self.articles.get(kb, [])[:2]  # the matching parts, else the guide's own text
+            body = "\n".join([*steps, *([a["excerpt"]] if a["excerpt"] else [])])
             content = title["content"] + (f"\n{body}" if body else "")
-            out.append({**_public(title), "content": content, "score": round(a["score"] + 0.6 * min(a["solved"], 5), 3),
-                        "solved": a["solved"], "has_steps": bool(body), "steps": body})
+            # ranked on the guide's own words; past questions only add a small bonus (their labels are noisy:
+            # Q3 "add employees in bulk" was often filed under the payslips guide). A guide matched only
+            # through past questions keeps that score, so it still ranks, below any guide whose words fit.
+            base = own[kb] if kb in own else a["score"] * 0.5
+            out.append({**_public(title), "content": content, "score": round(base + 0.6 * min(a["solved"], 5), 3),
+                        "solved": a["solved"], "has_steps": bool(body), "steps": body,
+                        "own_score": round(own.get(kb, 0.0), 3)})
         out.sort(key=lambda h: (-h["score"], h["chunk_id"]))
         return out[:k]
 

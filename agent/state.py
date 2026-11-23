@@ -54,6 +54,7 @@ class TicketState(TypedDict, total=False):
     handoff: bool  # the customer was told a person will reply (no written steps, or the risk policy)
     risk: dict  # agent.risk.assess: money / private-data / legal requests (labels and amounts only)
     reply_template: str | None  # the router's fixed reply for a risk-policy route
+    sla: dict  # agent.sla.assess: priority, respond-by / resolve-by, credit if the resolution target is missed
     learn_kb: list[str]  # How-To answered with a guide only: ask support to write the steps once
     citations: list[str]
     sources: dict  # {"as_of", "hits", "facts"}: what the draft was allowed to use (phase 8)

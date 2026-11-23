@@ -94,6 +94,7 @@ def record(state: dict, outcome: str) -> dict:
         "steps": list(state.get("steps") or []),
         "timings_ms": dict(state.get("timings") or {}),
         "trace_id": current_trace_id(),
+        "sla": state.get("sla"),
         "tier": (state.get("tenant") or {}).get("tier"),
         "as_of": src.get("as_of"),
     }

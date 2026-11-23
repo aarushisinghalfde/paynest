@@ -22,6 +22,7 @@ from agent import (
     retrieval,
     risk,
     router,
+    sla,
     templates,
     tools,
 )
@@ -46,6 +47,7 @@ class Deps:
     answer_cache: object = None  # agent.answer_cache (How-To answers): checked before RAG
     answer_at: float = 0.8  # confidence needed to SEND an agent-written answer without a person (models.yaml)
     guide_at: float = 5.0  # ...or a written guide matched at least this strongly (an information question)
+    guide_fit: float = 5.0  # a guide is used at all only if its own words match this well (else a person writes it)
 
 
 def _step(state, name):
@@ -153,7 +155,10 @@ def classify(state, deps: Deps):
         "team": c["team"],
         "confidence": c["confidence"],
         "classification": c,
-        "risk": risk.assess(text, (state.get("tenant") or {}).get("region")),
+        "risk": (r := risk.assess(text, (state.get("tenant") or {}).get("region"))),
+        # MSA Schedule 3: priority, respond-by and resolve-by, and the credit a missed target would cost
+        "sla": {**sla.assess(state.get("tenant"), (p := sla.priority(text, r, c, state.get("meta", {}).get("priority")))[0],
+                             state.get("meta", {}).get("created_at")), "priority_why": p[1]},
         "steps": _step(state, "classify"),
     }
 
@@ -208,7 +213,11 @@ def draft(state, deps: Deps):
         as_of = retrieval.question_date(q, state.get("meta", {}).get("created_at"))
         region = (state.get("tenant") or {}).get("region")
         lang = state.get("language", "en")
-        howto = route_ in ("reply", "queue") and (state.get("team") == "How-To" or conversation.is_howto(q))
+        howto = route_ in ("reply", "queue") and (
+            state.get("team") == "How-To" or conversation.is_howto(q)
+            # a guide that clearly matches answers an information request whatever its phrasing, but never
+            # a problem report: "webhook not firing" needs a person, not the setup guide
+            or (not conversation.PROBLEM.search(q) and _strong_guide(deps, q, region, as_of)))
         if howto:
             return {**out, "howto": True, **_howto(state, deps, q, region, lang, as_of, queued)}
         if route_ == "review":  # a person approves it: all approved sources and every tool
@@ -237,6 +246,25 @@ def draft(state, deps: Deps):
     return {**out, "draft": text, "draft_mode": "template"}
 
 
+def _strong_guide(deps: Deps, q, region, as_of) -> bool:
+    """A written guide clearly answers this ("download all payslips in bulk" is a How-To even though it is not
+    phrased as a question, and the classifier filed it under Payroll)."""
+    return clear_winner(deps.retriever.howto_articles(q, region, as_of), deps.guide_at)
+
+
+def clear_winner(hits: list[dict], at: float) -> bool:
+    """The top guide has written steps, its own words match the question, and it is clearly ahead of the
+    next one (by 2.5 points or half again). Q3 data: "download all payslips together" 16.3 vs 12.7 (clear); "change the payroll
+    approver" 14.0 vs 13.3 (no guide fits: a person answers)."""
+    if not hits or not hits[0].get("has_steps"):
+        return False
+    top, runner_up = hits[0].get("score", 0), (hits[1].get("score", 0) if len(hits) > 1 else 0)
+    # the guide's OWN title and text must match too: past questions carry the client's noisy labels
+    # ("add employees in bulk" filed under the payslips guide). Q3: right picks 5.5-13.8, wrong ones 0-4.7.
+    own = hits[0].get("own_score", top)
+    return top >= at and own >= at and (top - runner_up >= 2.5 or top >= 1.5 * runner_up)
+
+
 def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
     """How-To agent: approved library -> answer cache -> RAG over guides (+ past resolutions) -> compose."""
     when = as_of.isoformat()
@@ -263,6 +291,14 @@ def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
                 "learn_kb": learn}
     facts = [] if queued else [f for f in tools.run_tools(state, deps.retriever.rules, as_of, deps.payroll_url)
                                if f["tool"] == "get_run_status"]
+    if articles and not clear_winner(articles, deps.guide_fit) and not facts:
+        # no guide clearly covers this question (Q3: "add a new salary component" ranked the run-payroll guide
+        # first on past questions alone): a person writes the answer once, and it is reused from then on
+        return {"sources": {"as_of": when, "hits": [{k: _iso(v) for k, v in a.items()} for a in articles[:3]],
+                            "facts": []}, **_template(state, "howto_handoff"), "handoff": True,
+                # the guide fits but has no written steps yet: the answer support writes becomes its steps
+                "learn_kb": [articles[0]["kb_id"] or articles[0]["chunk_id"].split("#")[0]]
+                if articles[0].get("own_score", 0) >= deps.guide_fit else ["none"]}
     sources = {"as_of": when, "hits": [{k: _iso(v) for k, v in a.items()} for a in articles], "facts": facts}
     # 4. compose a conversational reply from those sources only
     d = drafter.draft_howto(state, articles, model=deps.model, rung=deps.draft_rung)
@@ -384,10 +420,8 @@ def _unsure(state, deps: Deps) -> str | None:
     # payslips?") needs no person: the guide match is the evidence, whatever the team classifier said.
     src = state.get("sources") or {}
     hits = src.get("hits") or []
-    if state.get("draft_mode") in ("model", "fallback") and hits and hits[0].get("has_steps"):
-        runner_up = hits[1].get("score", 0) if len(hits) > 1 else 0
-        if hits[0].get("score", 0) >= deps.guide_at and hits[0]["score"] >= 1.5 * runner_up:
-            return None
+    if state.get("draft_mode") in ("model", "fallback") and clear_winner(hits, deps.guide_at):
+        return None
     if state.get("draft_mode") == "cache" and (src.get("cache_similarity") or 0) >= 0.9:
         return None  # the same question, already answered from a guide and sent
     why = "the classifiers disagreed" if disagree else f"confidence {conf:.2f} is below {deps.answer_at:.2f}"

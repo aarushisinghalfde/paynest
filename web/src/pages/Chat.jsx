@@ -8,6 +8,7 @@ import { ACCENT, Card, INK, MUTED, Note, Page, SURFACE } from '../theme.jsx'
 // is answered with the earlier turns in mind. How-To answers come from the answer cache first,
 // then from the approved sources (RAG).
 const POLL_MS = 2000
+const CHAT_KEY = 'payce-chat'
 const FINAL = new Set(['replied', 'taken_over', 'failed', 'pii_blocked'])
 
 const STATUS = {
@@ -52,14 +53,17 @@ function Bubble({ who, children, sub }) {
 }
 
 export default function Chat() {
-  const [tenant, setTenant] = useState('C-1001')
+  // The conversation survives a reload (this tab only): a reply approved later by a reviewer still shows up.
+  const saved = (() => { try { return JSON.parse(sessionStorage.getItem(CHAT_KEY) || 'null') } catch { return null } })()
+  const [tenant, setTenant] = useState(saved?.tenant || 'C-1001')
   const [text, setText] = useState('')
-  const [messages, setMessages] = useState([])     // {text, ticketId}
-  const [tickets, setTickets] = useState({})       // ticketId -> ticket view
+  const [messages, setMessages] = useState(saved?.messages || [])     // {text, ticketId}
+  const [tickets, setTickets] = useState(() => Object.fromEntries((saved?.messages || [])
+    .map((m) => [m.ticketId, { status: 'received', replies: [] }])))  // ticketId -> ticket view
   const [error, setError] = useState('')
   const sending = useRef(false)
   // One conversation per page visit: the agent reads follow-ups together with earlier turns.
-  const [conversationId] = useState(() => crypto.randomUUID())
+  const [conversationId] = useState(() => saved?.conversationId || crypto.randomUUID())
   const bottom = useRef(null)
   const [feedback, setFeedback] = useState({})   // ticketId -> true once answered
 
@@ -121,12 +125,20 @@ export default function Chat() {
   }, [tickets])
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tickets])
+  useEffect(() => {
+    try { sessionStorage.setItem(CHAT_KEY, JSON.stringify({ conversationId, tenant, messages })) } catch { /* private mode */ }
+  }, [conversationId, tenant, messages])
+
+  function newConversation() {
+    try { sessionStorage.removeItem(CHAT_KEY) } catch { /* ignore */ }
+    window.location.reload()
+  }
 
   return (
     <Page narrow={760} title="Customer chat"
       subtitle="What a customer sees. Answers come from approved Payce sources; statutory answers are checked by a specialist first."
-      controls={<label>Company <input value={tenant} onChange={(e) => setTenant(e.target.value)} aria-label="Company (tenant id)"
-        style={{ width: 100 }} title="C-1001 is India; pick a UAE tenant for WPS questions" /></label>}>
+      controls={<><button className="small" onClick={newConversation}>New conversation</button><label>Company <input value={tenant} onChange={(e) => setTenant(e.target.value)} aria-label="Company (tenant id)"
+        style={{ width: 100 }} title="C-1001 is India; pick a UAE tenant for WPS questions" /></label></>}>
       <Card style={{ minHeight: 320, maxHeight: '60vh', overflowY: 'auto' }}>
         <Bubble who="bot">Hi! I can help with payroll, statutory rules (PF, TDS, WPS, gratuity), payslips and payroll runs.</Bubble>
         {messages.map((m) => {

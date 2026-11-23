@@ -37,11 +37,16 @@ def kind(text: str) -> str | None:
     return None
 
 
-HOWTO = re.compile(r"\b(how (do|can|to|should) (i|we|you)?|how to|where (can|do) (i|we)|steps to|kaise|kahan)\b"
+HOWTO = re.compile(r"\b(how (do|can|to|should) (i|we|you)?|how to|where (can|do) (i|we)|steps to|kaise|kahan"
+                   r"|kahaan|karne hain|karna hai|kar sakte|batao|bataiye|chahiye)\b"
                    r"|कैसे|कहाँ|كيف|أين", re.I)
 PROBLEM = re.compile(
     r"\b(error|fail(ed|ing|s)?|reject(ed|ion)?|not (credited|working|showing|generated|received|paid|loading)|wrong"
-    r"|mismatch|stuck|missing|unable|can'?t|cannot|issue|problem|urgent|nahi|nahin)\b"
+    r"|mismatch|stuck|missing|unable|can'?t|cannot|issue|problem|urgent|nahi|nahin"
+    # Q3 problem reports a guide does not fix: "token returns 401", "webhook not firing", "arrears not included"
+    r"|not (included|picked up|reflected|firing|triggering|syncing|updating|applied)|did ?n[o']?t|does ?n[o']?t"
+    r"|duplicate[sd]?|doubled|returns? (an? )?(error|[45]\d\d)|[45]0\d error|since (yesterday|today|the (last )?update)|blank|empty|loop|redirect\w*|keeps? (failing|logging)"
+    r"|aa rah[ie]|nahi (aa|ho|khul))\b"
     r"|नहीं|गलत|त्रुटि|لا أستطيع|لم يتم|لم تصل|خطأ|رفض|مشكلة", re.I)
 
 

@@ -1,0 +1,23 @@
+# Support service levels: MSA Schedule 3, template v3.2 (contracts signed or renewed from 1 Jan 2025).
+# Hours are elapsed calendar hours from ticket creation. A missed resolution target costs a credit of
+# credit_pct of the customer's monthly fee, x1.5 when resolution takes more than twice the target.
+# No monthly cap under v3.2. Standard tier: best effort, no credits (but churn risk: the CFO's point).
+template: v3.2
+severity_multiplier: 1.5
+at_risk_share: 0.75      # flag a ticket once 75% of its resolution time has gone
+tiers:
+  Enterprise:
+    P1: {first_response_h: 1, resolution_h: 8, credit_pct: 10}
+    P2: {first_response_h: 4, resolution_h: 24, credit_pct: 5}
+    P3: {first_response_h: 8, resolution_h: 72, credit_pct: 2}
+  Business:
+    P1: {first_response_h: 2, resolution_h: 12, credit_pct: 5}
+    P2: {first_response_h: 8, resolution_h: 48, credit_pct: 3}
+    P3: {first_response_h: 24, resolution_h: 96, credit_pct: 1}
+  Standard: {}
+
+# Schedule 3.2 priorities, read from the masked text. The customer's own pick is never lowered silently:
+# when we read it lower, the ticket keeps the customer's priority and the reviewer sees our reading.
+priority:
+  P1: '\b(cannot|can''t|unable to) (run|process|lock|finali[sz]e) (the )?payroll\b|\bpayroll (is )?(stuck|blocked|failing|failed)\b|\b(file|filing|return|challan|ecr|wps|sif|esi|pf)\b.{0,40}\b(due|deadline|last date)\b.{0,15}\b(today|tomorrow|tonight)\b|\b(today|tomorrow)\b.{0,25}\b(last date|deadline)\b|\b(salary|salaries|wages|pay)\b.{0,30}\b(not (been )?(paid|credited)|late|delayed|stuck)\b'
+  P2: '\b(doubled|tripled|not (included|picked up|reflected|applied|calculated)|missing from|left out|twice)\b.{0,40}\b(payslip|salary|net pay|tax|tds|pf|esi|deduction|arrears|overtime|bonus|register|bank file|amount|run|hours)\b|\b(payslip|salary|net pay|tax|tds|pf|esi|deduction|arrears|overtime|bonus|hours|amount)\b.{0,40}\b(doubled|tripled|not (included|picked up|reflected|applied|calculated)|missing|wrong|incorrect)\b|\b(wrong|incorrect|mismatch|miscalculat\w*|calculated wrong|error in|errors? on)\b.{0,30}\b(payslip|salary|net pay|tax|tds|pf|esi|deduction|arrears|register|bank file|amount)\b|\b(payslip|salary|net pay|tax|tds|pf|deduction)\b.{0,30}\b(wrong|incorrect|mismatch)\b|\b(module|page|screen|report|app)\b.{0,20}\b(down|not loading|not working|crash\w*|very slow)\b'

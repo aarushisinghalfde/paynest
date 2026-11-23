@@ -40,8 +40,10 @@ export default function Review() {
       headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
       body: JSON.stringify({ decision, body: edits[task.id] ?? task.draft, reviewer: 'reviewer' }),
     })
-    const done = task.kind === 'knowledge' ? 'Saved to the How-To library and sent' : 'Approved and sent'
-    setMsg(r.ok ? `${decision === 'approve' ? done : 'Rejected'}: ticket ${task.ticket_id.slice(0, 8)}` : `HTTP ${r.status}`)
+    const done = task.kind === 'knowledge' ? 'Saved to the guide and sent to every customer waiting on it' : 'Approved and sent'
+    const detail = r.ok ? null : (await r.json().catch(() => ({}))).detail
+    setMsg(r.ok ? `${decision === 'approve' ? done : 'Rejected'}: ticket ${task.ticket_id.slice(0, 8)}`
+      : `Not sent: ${detail || `HTTP ${r.status}`}`)
     load()
   }
 

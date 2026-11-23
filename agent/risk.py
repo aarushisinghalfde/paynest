@@ -55,9 +55,6 @@ def assess(text: str, region: str | None) -> dict:
     p = policy()
     money = [k for k, rx in p["_money"].items() if rx.search(text or "")]
     private = [k for k, rx in p["_private"].items() if rx.search(text or "")]
-    # an ID or account number on its own (e.g. in a payroll question) is masked, not a data request
-    if private == ["identity_numbers"] and not money:
-        private = []
     amt = max(amounts(text, region), key=lambda a: a[1] / p["second_approver_at"].get(a[0], 1), default=None) \
         if money else None
     limit = p["second_approver_at"].get(amt[0]) if amt else None

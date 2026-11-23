@@ -485,7 +485,9 @@ function Trail({ id, token, onChanged }) {
   if (msg) return <p style={{ color: BAD }}>{msg}</p>
   if (!t) return <p style={{ color: MUTED }}>Loading ticket…</p>
   const dcs = t.decision || {}
-  const c = dcs.classification || {}
+  // tickets from before decision records (22 Nov and earlier) keep team and confidence on the ticket itself
+  const c = { ...(t.classification || {}), ...(dcs.classification || {}) }
+  if (!c.team) c.team = t.team
   const a = dcs.answer || {}
   const g = dcs.guard || {}
   const m = dcs.merge || {}

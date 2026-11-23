@@ -181,3 +181,75 @@ def test_demo_guides_load_once_and_never_overwrite_a_real_article():
     assert ki.demo_guides(store) == []  # idempotent
     steps = [c["content"] for c in store.knowledge()[0] if c["kb_id"] == "KB-0105" and c["source_kind"] == "kb_article"]
     assert steps and "Real step one" in steps[0]
+
+
+# ---- what a reviewer writes is kept and reused ------------------------------------------------------------
+
+def _learning():
+    store = MemoryAgentStore(TENANTS)
+    store.kb = [*CHUNKS, PAYSLIP]  # the guide has a title only: the first askers go to a person
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever(store.knowledge()[0], RULES), answer_at=0.5)
+
+    def ask(q, cid):
+        tid = store.create("C-1001", "chat", q, None)
+        store.save_progress(tid, conversation_id=cid)
+        return tid, run(tid, deps, MemoryCheckpoints())
+    return store, deps, ask
+
+
+STEPS = "1. Go to Payroll > Payslips.\n2. Pick the month, select all employees and click Download as ZIP."
+
+
+def test_an_empty_approval_is_refused_so_no_customer_gets_an_empty_message():
+    import pytest
+
+    store, _, ask = _learning()
+    ask("How do I download payslips for all employees?", "conv-l0000001")
+    ask("how can I download the payslips of all my employees", "conv-l0000002")
+    reply = next(t for t in store.list_reviews() if t["kind"] == "reply")
+    with pytest.raises(ValueError, match="write the reply"):
+        store.decide_review(reply["id"], "approve", None, "arvind")
+
+
+def test_steps_written_once_answer_every_waiting_customer_and_every_later_asker():
+    store, deps, ask = _learning()
+    t1, _ = ask("How do I download payslips for all employees?", "conv-l0000003")
+    t2, _ = ask("how can I download the payslips of all my employees", "conv-l0000004")
+    task = next(t for t in store.list_reviews() if t["kind"] == "knowledge")
+    store.decide_review(task["id"], "approve", STEPS, "arvind")
+    for t in (t1, t2):  # both customers waiting on the question get the steps now
+        assert store.replies(t)[-1]["body"] == STEPS and store.tickets[t]["agent_status"] == "replied"
+    assert not store.list_reviews()  # the second customer's task was closed with the same answer
+    # the answer is now part of the guide, so retrieval finds it for other wordings (worker reloads)
+    assert any(c["chunk_id"].startswith("KB-0105#approved-") for c in store.knowledge()[0])
+    deps.retriever = Retriever(store.knowledge()[0], RULES)
+    t3, st = ask("can I download the payslips of all my employees together?", "conv-l0000005")
+    assert st["sent"] and "Download as ZIP" in store.replies(t3)[0]["body"]
+
+
+def test_a_reply_a_reviewer_writes_for_a_howto_ticket_is_learned_too():
+    store, _, ask = _learning()
+    ask("How do I download payslips for all employees?", "conv-l0000006")
+    t2, _ = ask("how can I download the payslips of all my employees", "conv-l0000007")
+    reply = next(t for t in store.list_reviews() if t["kind"] == "reply")
+    store.decide_review(reply["id"], "approve", STEPS, "arvind")
+    assert store.replies(t2)[-1]["body"] == STEPS
+    assert any(e["answer"] == STEPS for e in store.library)
+
+
+def test_a_problem_report_is_never_answered_with_a_setup_guide():
+    # Q3: "webhook not firing" got the integration setup guide and counted as resolved; it needs a person
+    from agent import conversation
+
+    for text in ("Webhook not firing on payroll completion", "API token returns 401 since yesterday",
+                 "Arrears not included. Please advise how to add them", "Salary register export is blank"):
+        assert conversation.PROBLEM.search(text) and not conversation.is_howto(text), text
+
+
+def test_a_guide_is_used_only_when_its_own_words_fit():
+    from agent.nodes import clear_winner
+
+    right = [{"has_steps": True, "score": 12.3, "own_score": 9.3}, {"score": 6.3}]
+    only_past_questions = [{"has_steps": True, "score": 14.0, "own_score": 0.0}, {"score": 5.6}]
+    too_close = [{"has_steps": True, "score": 14.0, "own_score": 6.0}, {"score": 13.3}]
+    assert clear_winner(right, 5.0) and not clear_winner(only_past_questions, 5.0) and not clear_winner(too_close, 5.0)

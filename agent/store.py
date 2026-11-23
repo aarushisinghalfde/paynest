@@ -151,12 +151,14 @@ class PgAgentStore(PgTicketStore):
 
     def decide_review(self, task_id, decision, body=None, reviewer=None):
         with self._conn() as conn, conn.transaction():
-            kind = conn.execute("SELECT kind FROM review_tasks WHERE id = %s AND status = 'open'",
+            kind = conn.execute("SELECT kind, draft FROM review_tasks WHERE id = %s AND status = 'open'",
                                 (task_id,)).fetchone()
             if kind is None:
                 return None
-            if decision == "approve" and kind[0] == "knowledge" and not (body or "").strip():
-                raise ValueError("write the answer before approving")
+            if decision == "approve" and not (body if body is not None else kind[1] or "").strip():
+                # an empty approval would send the customer an empty message
+                raise ValueError("write the answer before approving" if kind[0] == "knowledge"
+                                 else "write the reply before approving")
             row = conn.execute("""UPDATE review_tasks SET status = %s, decision = %s, assignee = %s,
                                          draft = coalesce(%s, draft), decided_at = now(),
                                          outcome = CASE WHEN %s <> 'approve' THEN 'rejected'
@@ -169,17 +171,12 @@ class PgAgentStore(PgTicketStore):
             if row is None:
                 return None
             ticket_id, draft, sources = row
-            if decision == "approve" and kind[0] == "knowledge":
-                # the approved answer joins the How-To library: every similar question gets it from now on
-                conn.execute(
-                    """INSERT INTO howto_answers (id, region, language, question, answer, kb_ids, source, approved_by,
-                                                 ticket_id)
-                       SELECT %s, tn.region, coalesce(t.language, 'en'), coalesce(t.masked_body, ''), %s, %s,
-                              'agent_approved', %s, t.id
-                       FROM tickets t LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id WHERE t.id = %s
-                       ON CONFLICT (id) DO NOTHING""",
-                    (str(uuid.uuid5(uuid.NAMESPACE_URL, f"howto:{task_id}")), draft,
-                     [k for k in (sources or []) if isinstance(k, str)], reviewer, ticket_id))
+            if decision == "approve":
+                t = conn.execute("""SELECT coalesce(t.masked_body, ''), coalesce(t.language, 'en'), t.team, tn.region,
+                                           t.decision FROM tickets t LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id
+                                    WHERE t.id = %s""", (ticket_id,)).fetchone()
+                if kind[0] == "knowledge" or (t and t[2] == "How-To"):
+                    self._learn(conn, task_id, ticket_id, t, draft, kind[0], sources, reviewer)
             if decision == "approve":
                 version = conn.execute("SELECT coalesce(max(draft_version), 0) + 1 FROM sent_replies WHERE ticket_id = %s",
                                        (ticket_id,)).fetchone()[0]
@@ -188,6 +185,49 @@ class PgAgentStore(PgTicketStore):
             conn.execute("UPDATE tickets SET agent_status = %s WHERE id = %s",
                          ("replied" if decision == "approve" else "taken_over", ticket_id))
         return ticket_id
+
+    def _learn(self, conn, task_id, ticket_id, t, answer, kind, sources, reviewer):
+        """A How-To answer a person wrote or approved is kept and reused: it joins the approved-answer library
+        (near-identical questions), becomes part of its guide (retrieval finds it for any wording; the worker
+        reloads within a minute), and customers waiting on the same question get it now."""
+        from agent import answer_library
+
+        question, language, _team, region, dec = t
+        kb_ids = [k for k in (sources or []) if isinstance(k, str) and k != "none"] if kind == "knowledge" else []
+        if not kb_ids and dec:
+            a = (dec or {}).get("answer") or {}
+            kb_ids = [k for k in (a.get("learn_kb") or []) if k != "none"] or [
+                s.get("kb_id") for s in (a.get("sources") or [])[:1] if s.get("kb_id")]
+        conn.execute(
+            """INSERT INTO howto_answers (id, region, language, question, answer, kb_ids, source, approved_by, ticket_id)
+               VALUES (%s, %s, %s, %s, %s, %s, 'agent_approved', %s, %s) ON CONFLICT (id) DO NOTHING""",
+            (str(uuid.uuid5(uuid.NAMESPACE_URL, f"howto:{task_id}")), region, language, question, answer,
+             kb_ids, reviewer, ticket_id))
+        for kb in kb_ids[:1]:
+            conn.execute(
+                """INSERT INTO kb_chunks (chunk_id, kb_id, source_kind, region, topic, language, title, content,
+                                         last_reviewed)
+                   SELECT %s, %s, 'kb_article', 'ALL', 'howto', %s,
+                          (SELECT title FROM kb_chunks WHERE chunk_id = %s), %s, current_date
+                   ON CONFLICT (chunk_id) DO UPDATE SET content = EXCLUDED.content, last_reviewed = current_date""",
+                (f"{kb}#approved-{task_id[:8]}", kb, language, f"{kb}#title", answer))
+        if kind != "knowledge":
+            return
+        waiting = conn.execute(
+            """SELECT r.id::text, r.ticket_id::text, coalesce(t.masked_body, '') FROM review_tasks r
+               JOIN tickets t ON t.id = r.ticket_id
+               WHERE r.status = 'open' AND r.kind = 'reply' AND r.route_reason LIKE 'How-To with no written steps%%'
+                 AND r.ticket_id <> %s""", (ticket_id,)).fetchall()
+        for rid, tid, q in waiting:
+            if answer_library.similarity(question, q) < 0.6:
+                continue
+            conn.execute("""UPDATE review_tasks SET status = 'approved', decision = 'approve', assignee = %s, draft = %s,
+                                   decided_at = now(), outcome = 'edited' WHERE id = %s""", (reviewer, answer, rid))
+            v = conn.execute("SELECT coalesce(max(draft_version), 0) + 1 FROM sent_replies WHERE ticket_id = %s",
+                             (tid,)).fetchone()[0]
+            conn.execute("INSERT INTO sent_replies (ticket_id, draft_version, body_masked, channel) "
+                         "VALUES (%s, %s, %s, 'chat') ON CONFLICT DO NOTHING", (tid, v, answer))
+            conn.execute("UPDATE tickets SET agent_status = 'replied' WHERE id = %s", (tid,))
 
     # ---- operations dashboard -----------------------------------------------------------
     def dashboard_data(self, scope: str = "live", days: int = 7) -> dict:
@@ -316,7 +356,9 @@ class PgAgentStore(PgTicketStore):
         out = []
         with self._conn() as conn, conn.transaction():
             for a in articles:
-                conn.execute("DELETE FROM kb_chunks WHERE kb_id = %s AND source_kind = 'kb_article'", (a.kb_id,))
+                # replace the article text; answers support wrote (#approved-) stay
+                conn.execute("DELETE FROM kb_chunks WHERE kb_id = %s AND source_kind = 'kb_article' "
+                             "AND chunk_id NOT LIKE '%%#approved-%%'", (a.kb_id,))
                 had_title = conn.execute("SELECT 1 FROM kb_chunks WHERE chunk_id = %s",
                                          (f"{a.kb_id}#title",)).fetchone() is not None
                 if not had_title:
@@ -595,7 +637,8 @@ class MemoryAgentStore(MemoryTicketStore):
         self.kb, self.imports = self.kb or [], self.imports or {}
         out = []
         for a in articles:
-            self.kb = [c for c in self.kb if not (c["kb_id"] == a.kb_id and c["source_kind"] == "kb_article")]
+            self.kb = [c for c in self.kb if not (c["kb_id"] == a.kb_id and c["source_kind"] == "kb_article"
+                                                  and "#approved-" not in c["chunk_id"])]
             had = any(c["chunk_id"] == f"{a.kb_id}#title" for c in self.kb)
             if not had:
                 self.kb.append({"chunk_id": f"{a.kb_id}#title", "kb_id": a.kb_id, "source_kind": "kb_title",
@@ -666,14 +709,12 @@ class MemoryAgentStore(MemoryTicketStore):
         r = (self.reviews or {}).get(task_id)
         if not r or r["status"] != "open":
             return None
-        if decision == "approve" and r.get("kind") == "knowledge":
-            if not (body or "").strip():
-                raise ValueError("write the answer before approving")
-            t = self.tickets[r["ticket_id"]]
-            self.library = self.library or []
-            self.library.append({"id": f"lib-{len(self.library) + 1}", "question": t.get("masked_body") or "",
-                                 "answer": body, "kb_ids": r.get("kb_ids") or [], "language": t.get("language") or "en",
-                                 "region": (self.tenants.get(t["tenant_id"]) or {}).get("region")})
+        if decision == "approve" and not (body if body is not None else r.get("draft") or "").strip():
+            raise ValueError("write the answer before approving" if r.get("kind") == "knowledge"
+                             else "write the reply before approving")
+        t = self.tickets[r["ticket_id"]]
+        if decision == "approve" and (r.get("kind") == "knowledge" or t.get("team") == "How-To"):
+            self._learn(r, t, body if body is not None else r["draft"], reviewer)
         r["status"] = "approved" if decision == "approve" else "rejected"
         final = (body if body is not None else r["draft"]) or ""
         r["outcome"] = ("rejected" if decision != "approve" else
@@ -684,6 +725,37 @@ class MemoryAgentStore(MemoryTicketStore):
             self.insert_reply(r["ticket_id"], n, body or r["draft"], "chat")
         self.tickets[r["ticket_id"]]["agent_status"] = "replied" if decision == "approve" else "taken_over"
         return r["ticket_id"]
+
+    def _learn(self, r, t, answer, reviewer):
+        """Same as the Postgres store: library + part of the guide + answer the customers waiting on it."""
+        from agent import answer_library
+
+        kb_ids = [k for k in (r.get("kb_ids") or []) if k != "none"]
+        if not kb_ids:
+            a = (t.get("decision") or {}).get("answer") or {}
+            kb_ids = [k for k in (a.get("learn_kb") or []) if k != "none"] or [
+                s.get("kb_id") for s in (a.get("sources") or [])[:1] if s.get("kb_id")]
+        self.library = self.library or []
+        self.library.append({"id": f"lib-{len(self.library) + 1}", "question": t.get("masked_body") or "",
+                             "answer": answer, "kb_ids": kb_ids, "language": t.get("language") or "en",
+                             "region": (self.tenants.get(t["tenant_id"]) or {}).get("region")})
+        self.kb = self.kb or []
+        for kb in kb_ids[:1]:
+            title = next((c.get("title") for c in self.kb if c["chunk_id"] == f"{kb}#title"), None)
+            cid = f"{kb}#approved-{r['id'][:8]}"
+            self.kb = [c for c in self.kb if c["chunk_id"] != cid] + [
+                {"chunk_id": cid, "kb_id": kb, "source_kind": "kb_article", "region": "ALL", "topic": "howto",
+                 "title": title, "content": answer}]
+        if r.get("kind") != "knowledge":
+            return
+        for w in list((self.reviews or {}).values()):
+            if (w["status"] == "open" and w.get("kind") == "reply" and w["ticket_id"] != r["ticket_id"]
+                    and (w.get("route_reason") or "").startswith("How-To with no written steps")
+                    and answer_library.similarity(t.get("masked_body") or "",
+                                                  self.tickets[w["ticket_id"]].get("masked_body") or "") >= 0.6):
+                w.update(status="approved", outcome="edited", draft=answer, assignee=reviewer)
+                self.insert_reply(w["ticket_id"], len(self.replies(w["ticket_id"])) + 1, answer, "chat")
+                self.tickets[w["ticket_id"]]["agent_status"] = "replied"
 
     def save_progress(self, ticket_id, **fields):
         self.tickets[ticket_id].update(fields)
