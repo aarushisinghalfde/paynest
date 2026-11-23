@@ -10,6 +10,7 @@ row, for example a ticket body).
 """
 import json
 import logging
+import re
 import traceback
 
 _RESERVED = set(vars(logging.LogRecord("", 0, "", 0, "", (), None)))
@@ -49,5 +50,6 @@ def log_event(logger: logging.Logger, event: str, level: int = logging.INFO, **f
 def safe_error(exc: BaseException) -> dict:
     """Exception type and where it happened (file:line of the innermost frame), no message."""
     frames = traceback.extract_tb(exc.__traceback__)
-    where = f"{frames[-1].filename.rsplit('/', 1)[-1]}:{frames[-1].lineno}" if frames else None
+    name = re.split(r"[\\/]", frames[-1].filename)[-1] if frames else ""  # Windows and Linux paths
+    where = f"{name}:{frames[-1].lineno}" if frames else None
     return {"error": type(exc).__name__, "where": where}

@@ -51,10 +51,29 @@ if ($existing -and $existing.Trim() -ne $head) {
   exit 1
 }
 
-# 2. Push branch and tag.
-Step "Pushing $(git rev-parse --abbrev-ref HEAD) and tag $Version ($($head.Substring(0,8)))"
+# 2. The CI checks locally, then the branch alone, and the tag only once CI is green on that commit.
+#    A failed check used to burn the version tag (v0.9.3, v0.9.4); now nothing is tagged until CI passes.
+& "$PSScriptRoot\precheck.ps1"
+if ($LASTEXITCODE -ne 0) { exit 1 }
+Step "Pushing $(git rev-parse --abbrev-ref HEAD) ($($head.Substring(0,8))); tag $Version waits for CI"
 git push
 if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+$slug = ((git remote get-url origin) -replace '\.git$', '' -split 'github.com[:/]')[1]
+$checks = "https://api.github.com/repos/$slug/commits/$head/check-runs"
+$deadline = (Get-Date).AddMinutes(20)
+do {
+  Start-Sleep -Seconds 30
+  try { $runs = (Invoke-RestMethod -Uri $checks -Headers @{ "User-Agent" = "paynest-deploy" }).check_runs } catch { $runs = @() }
+  $open = @($runs | Where-Object { $_.status -ne "completed" })
+  if ($runs) { Step "  CI: $($runs.Count - $open.Count)/$($runs.Count) jobs done" } else { Step "  CI: waiting for the run to start" }
+} while ((-not $runs -or $open) -and (Get-Date) -lt $deadline)
+$bad = @($runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -notin @("success", "skipped", "neutral") })
+if (-not $runs -or $open -or $bad) {
+  Write-Host "CI is not green on $($head.Substring(0,8)); $Version was NOT tagged. Fix, commit, and run deploy again with the same version." -ForegroundColor Red
+  $bad | ForEach-Object { Write-Host "  $($_.name): $($_.conclusion)  $($_.html_url)" -ForegroundColor Red }
+  exit 1
+}
+Step "CI green. Tagging $Version"
 if (-not $existing) { git tag $Version }
 git push origin $Version
 if ($LASTEXITCODE -ne 0) { throw "git push of the tag failed" }

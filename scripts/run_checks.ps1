@@ -83,9 +83,11 @@ if ($Restart) {
   Start-Sleep -Seconds 20
 }
 
-# The few packages the check scripts and the evals need on the laptop (the app's own list is
-# requirements.txt, inside the Docker image). Quick when already installed.
-python -m pip install -q --disable-pip-version-check "boto3[crt]" pyyaml python-dotenv scikit-learn *>&1 | Tee-Object -FilePath $Log -Append
+# Everything runs in the repo's .venv (requirements.txt), never the system Python, so packages
+# are installed in one place only. The check scripts need boto3, pyyaml, dotenv and scikit-learn.
+$py = if (Test-Path ".venv\Scripts\python.exe") { (Resolve-Path ".venv\Scripts\python.exe").Path } else { "python" }
+& $py -c "import boto3, yaml, dotenv, sklearn" *> $null
+if ($LASTEXITCODE -ne 0) { & $py -m pip install -q --disable-pip-version-check "boto3[crt]" pyyaml python-dotenv scikit-learn *>&1 | Tee-Object -FilePath $Log -Append }
 
 # 3. Wait for the app.
 Say "Waiting for health (up to 15 min)..."
@@ -101,29 +103,29 @@ if ($leadLine) { $env:LEAD_TOKEN = ($leadLine -split '=', 2)[1].Trim().Trim('"')
 $summary = @()
 foreach ($check in "check_phase4.py", "check_chat.py", "check_dashboard.py", "check_knowledge.py", "check_agent_live.py") {
   Say "=== $check ==="
-  python "scripts\$check" *>&1 | Tee-Object -FilePath $Log -Append
+  & $py "scripts\$check" *>&1 | Tee-Object -FilePath $Log -Append
   Say "exit code $LASTEXITCODE"
   $summary += "{0,-22} {1}" -f $check, $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
 }
 
 # 6. Phase C evals: local, on your copy of the data room (no AWS, no model).
 Say "=== run_evals.py (local) ==="
-python "scripts\run_evals.py" --record *>&1 | Tee-Object -FilePath $Log -Append
+& $py "scripts\run_evals.py" --record *>&1 | Tee-Object -FilePath $Log -Append
 $summary += "{0,-22} {1}" -f "run_evals.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
 # 7. Phase D/E checks, when their infrastructure exists (skipped, not failed, before the stacks are applied).
 $ErrorActionPreference = "Continue"
 $null = aws cloudformation describe-stacks --region $Region --stack-name paynest-demo-agentcore 2>$null
 if ($LASTEXITCODE -eq 0) {
   Say "=== check_agentcore.py ==="
-  python "scripts\check_agentcore.py" *>&1 | Tee-Object -FilePath $Log -Append
+  & $py "scripts\check_agentcore.py" *>&1 | Tee-Object -FilePath $Log -Append
   $summary += "{0,-22} {1}" -f "check_agentcore.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
 } else { $summary += "{0,-22} {1}" -f "check_agentcore.py", "skipped (stack not applied)" }
 Say "=== check_traces.py ==="
-python "scripts\check_traces.py" *>&1 | Tee-Object -FilePath $Log -Append
+& $py "scripts\check_traces.py" *>&1 | Tee-Object -FilePath $Log -Append
 $summary += "{0,-22} {1}" -f "check_traces.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL (needs the iam + ec2 updates)" })
 
 # 8. Evidence: the latest result of every gate into docs/PROJECT_STATE.md.
-python "scripts\evidence.py" *>&1 | Tee-Object -FilePath $Log -Append
+& $py "scripts\evidence.py" *>&1 | Tee-Object -FilePath $Log -Append
 Say "Summary:"
 $summary | ForEach-Object { Say "  $_" }
 Say "Done. Log: $Log"

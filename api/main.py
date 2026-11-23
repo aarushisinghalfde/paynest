@@ -276,7 +276,11 @@ def console_compare(ticket_id: str, date: str, x_admin_token: str | None = Heade
     t = store.console_ticket(ticket_id)
     if t is None:
         raise HTTPException(404, "ticket not found")
-    _, rules = store.knowledge()
+    from agent.retrieval import _as_date
+
+    # rules come back as JSON (dates as text): compare them as dates, the way retrieval does
+    rules = [dict(r, effective_from=_as_date(r["effective_from"])) for r in store.knowledge()[1]
+             if r.get("effective_from")]
     asked = ((t.get("decision") or {}).get("answer") or {}).get("as_of")
     topics = tools.plan(t.get("masked_body") or "", t.get("region"))["rates"]
     rows = []
