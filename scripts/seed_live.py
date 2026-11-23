@@ -25,9 +25,21 @@ TENANTS = {"IN": ["C-1001", "C-1002", "C-1005", "C-1013", "C-1014", "C-1031", "C
 DONE = {"replied", "waiting_review", "taken_over", "failed"}
 
 
-def call(method: str, path: str, body: dict | None = None) -> dict:
+def token() -> str | None:
+    """LEAD_TOKEN or ADMIN_TOKEN from .env (read only), to ask the control room what really happened."""
+    env = ROOT / ".env"
+    if not env.exists():
+        return None
+    vals = dict(ln.split("=", 1) for ln in env.read_text(encoding="utf-8").splitlines() if "=" in ln and not ln.startswith("#"))
+    return (vals.get("LEAD_TOKEN") or vals.get("ADMIN_TOKEN") or "").strip().strip('"') or None
+
+
+def call(method: str, path: str, body: dict | None = None, tok: str | None = None) -> dict:
+    headers = {"Content-Type": "application/json", "Idempotency-Key": str(uuid.uuid4())}
+    if tok:
+        headers["X-Admin-Token"] = tok
     req = urllib.request.Request(API + path, method=method, data=json.dumps(body).encode() if body else None,
-                                 headers={"Content-Type": "application/json", "Idempotency-Key": str(uuid.uuid4())})
+                                 headers=headers)
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
 
@@ -65,6 +77,8 @@ def main() -> None:
                                       "conversation_id": str(uuid.uuid4())})
         sent.append({"ref": t["ticket_ref"], "team": t["data_label"], "language": t["language"], "tenant": tenant,
                      "ticket_id": r["ticket_id"]})
+        if len(sent) % 20 == 0:
+            print(f"  sent {len(sent)}/{len(chosen)}", flush=True)
         time.sleep(1.0)
     if not args.no_burst:  # five reports of the same outage from one customer within a minute
         for i in range(5):
@@ -73,7 +87,7 @@ def main() -> None:
             sent.append({"ref": f"burst-{i + 1}", "team": "Integration", "language": "en", "tenant": "C-1002",
                          "ticket_id": r["ticket_id"]})
             time.sleep(2)
-    print("Waiting for the agent ...")
+    print("Waiting for the agent ...", flush=True)
     deadline = time.time() + 300
     while time.time() < deadline:
         for s in sent:
@@ -81,19 +95,33 @@ def main() -> None:
                 continue
             t = call("GET", f"/tickets/{s['ticket_id']}")
             s.update(status=t.get("agent_status"), route=t.get("route"), replies=len(t.get("replies") or []))
-        if all(s.get("status") in DONE for s in sent):
+        left = sum(s.get("status") not in DONE for s in sent)
+        if not left:
             break
+        print(f"  {left} still being processed ...", flush=True)
         time.sleep(5)
+    tok = token()
+    if tok:  # the control room's own outcome: resolved by the agent, waiting for approval, with a person...
+        for s in sent:
+            try:
+                d = call("GET", f"/console/tickets/{s['ticket_id']}?translate=false", tok=tok)
+                s.update(outcome=d.get("bucket"), rule=d.get("route_rule"),
+                         priority=((d.get("decision") or {}).get("sla") or {}).get("priority"))
+            except Exception:  # noqa: BLE001 - fall back to the public status
+                pass
     by = collections.Counter((s.get("route"), s.get("status")) for s in sent)
     print("\nroute / status                    tickets")
     for (route, status), n in by.most_common():
         print(f"  {str(route):12} {str(status):18} {n}")
     team = collections.defaultdict(collections.Counter)
     for s in sent:
-        team[s["team"]]["answered" if s.get("status") == "replied" and s.get("route") == "reply" else
-                        "with a person" if s.get("status") in ("waiting_review", "taken_over") else
-                        s.get("route") or "pending"] += 1
-    print("\nby team (Q3 label):")
+        team[s["team"]][s.get("outcome") or ("replied" if s.get("status") == "replied" else
+                                             "with a person" if s.get("status") in ("waiting_review", "taken_over")
+                                             else s.get("route") or "pending")] += 1
+    if not tok:
+        print("\n(no LEAD_TOKEN or ADMIN_TOKEN in .env: 'replied' includes holding replies, not only answers)")
+    print("\nby team (Q3 label): resolved = answered by the agent; approval = waiting for a person to approve;"
+          " human = with a team; merged = incident or duplicate")
     for k, c in sorted(team.items()):
         print(f"  {k:20} {dict(c)}")
     out = ROOT / "results" / f"seed_{time.strftime('%Y%m%d-%H%M')}.json"
