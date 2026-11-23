@@ -23,7 +23,10 @@ $ErrorActionPreference = "Stop"
 $AwsProfile = "payce-fde"
 $Account = "665651551863"
 $Region = "ap-southeast-2"
-$InstanceId = "i-038b0f4a1eee1c90e"
+# The server is found by its Name tag, so a replaced instance (new id) needs no script change.
+$InstanceId = (aws ec2 describe-instances --region ap-southeast-2 --profile payce-fde `
+  --filters "Name=tag:Name,Values=paynest-demo-server" "Name=instance-state-name,Values=pending,running,stopping,stopped" `
+  --query "Reservations[0].Instances[0].InstanceId" --output text)
 $Param = "/paynest/demo/REDIS_URL"
 $Backup = "/paynest/demo/REDIS_URL_UPSTASH"
 $KeyAlias = "alias/paynest-demo"

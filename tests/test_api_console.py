@@ -52,3 +52,15 @@ def test_customer_feedback(console):
     assert client.post(f"/tickets/{ids[1]}/feedback", json={"solved": False}).json()["feedback"] == "no"
     assert store.tickets[ids[1]]["feedback"] == "no"
     assert client.post("/tickets/not-a-uuid/feedback", json={"solved": True}).status_code == 404
+
+
+def test_named_reviewer_decisions_are_attributed_from_the_token(console, monkeypatch):
+    store, ids = console
+    monkeypatch.setattr(settings, "REVIEWER_TOKENS", "priya:priya-token-123456789")
+    h = {"X-Admin-Token": "priya-token-123456789"}
+    tasks = client.get("/review/tasks", headers=h).json()
+    task = next(t for t in tasks if t.get("kind", "reply") == "reply")
+    r = client.post(f"/review/tasks/{task['id']}", headers=h, json={"decision": "approve", "reviewer": "someone else"})
+    assert r.status_code == 200
+    assert store.reviews[task["id"]]["assignee"] == "priya"
+    assert client.post("/knowledge", json={"articles": []}, headers=h).status_code == 401  # reviewers cannot import

@@ -155,13 +155,25 @@ class Decision(BaseModel):
     reviewer: str = Field(default="reviewer", max_length=100)
 
 
-def _admin(token: str | None):
+def _admin(token: str | None) -> str:
+    """Admin only (knowledge import, settings). Returns "admin"."""
     if not settings.ADMIN_TOKEN:
         raise HTTPException(503, "review console disabled: ADMIN_TOKEN not set")
     import hmac
 
     if not token or not hmac.compare_digest(token, settings.ADMIN_TOKEN):
         raise HTTPException(401, "admin token required")
+    return "admin"
+
+
+def _reviewer(token: str | None) -> str:
+    """Review queue: a named reviewer (REVIEWER_TOKENS) or the admin. Returns who is acting."""
+    import hmac
+
+    for t, name in settings.reviewers().items():
+        if token and hmac.compare_digest(token, t):
+            return name
+    return _admin(token)
 
 
 def _reader(token: str | None) -> str:
@@ -173,6 +185,8 @@ def _reader(token: str | None) -> str:
         return "admin"
     if token and settings.LEAD_TOKEN and hmac.compare_digest(token, settings.LEAD_TOKEN):
         return "lead"
+    if token and any(hmac.compare_digest(token, t) for t in settings.reviewers()):
+        return "reviewer"
     if not settings.ADMIN_TOKEN and not settings.LEAD_TOKEN:
         raise HTTPException(503, "console disabled: ADMIN_TOKEN / LEAD_TOKEN not set")
     raise HTTPException(401, "lead or admin token required")
@@ -325,13 +339,15 @@ def knowledge_withdraw(kb_id: str, x_admin_token: str | None = Header(default=No
 
 @app.get("/review/tasks")
 def review_tasks(x_admin_token: str | None = Header(default=None)) -> list:
-    _admin(x_admin_token)
+    _reviewer(x_admin_token)
     return get_store().list_reviews()
 
 
 @app.post("/review/tasks/{task_id}")
 def review_decide(task_id: str, d: Decision, x_admin_token: str | None = Header(default=None)) -> dict:
-    _admin(x_admin_token)
+    who = _reviewer(x_admin_token)
+    # attribution comes from the token, never from the form; the shared admin token stays marked as such
+    d.reviewer = who if who != "admin" else f"admin ({(d.reviewer or 'unnamed')[:40]})"
     try:
         ticket_id = get_store().decide_review(task_id, d.decision, d.body, d.reviewer)
     except ValueError as exc:  # a knowledge task approved without writing the answer

@@ -107,6 +107,19 @@ function Resolve-ParamValue {
     Write-Host "EC2 private IP in ${region}: $ip" -ForegroundColor DarkGray
     return $ip
   }
+  if ($Value -eq "auto:current-ami") {
+    # Keep the server's image so an update never replaces the instance; latest AL2023 ARM if none yet.
+    $ami = Get-Text @("ec2", "describe-instances", "--region", $region,
+      "--filters", "Name=tag:Name,Values=$Project-$Target-server", "Name=instance-state-name,Values=pending,running,stopping,stopped",
+      "--query", "Reservations[0].Instances[0].ImageId", "--output", "text")
+    if (-not $ami -or $ami -eq "None") {
+      $ami = Get-Text @("ssm", "get-parameter", "--region", $region,
+        "--name", "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64", "--query", "Parameter.Value", "--output", "text")
+    }
+    if (-not $ami) { throw "Could not resolve an AMI in $region." }
+    Write-Host "Server image (AMI) in ${region}: $ami" -ForegroundColor DarkGray
+    return $ami
+  }
   if ($Value -eq "auto:latest-tag") {
     # The latest released version (git tag), e.g. for the AgentCore runtime image.
     $tag = (git describe --tags --abbrev=0 2>$null)
@@ -164,6 +177,14 @@ switch ($Action) {
     Invoke-Native aws (@("cloudformation", "describe-change-set", "--change-set-name", $cs) + $common + @(
         "--query", "Changes[].ResourceChange.{Action:Action,Resource:LogicalResourceId,Type:ResourceType,Replace:Replacement}",
         "--output", "table", "--no-cli-pager"))
+    # Replacing a stateful or addressed resource (server, database, cache) is never routine: say so loudly.
+    $replaced = Get-Text (@("cloudformation", "describe-change-set", "--change-set-name", $cs) + $common + @(
+        "--query", "Changes[?ResourceChange.Replacement=='True' && contains(['AWS::EC2::Instance','AWS::RDS::DBInstance','AWS::ElastiCache::ReplicationGroup','AWS::DynamoDB::Table'], ResourceChange.ResourceType)].ResourceChange.LogicalResourceId",
+        "--output", "text"))
+    if ($replaced -and $replaced -ne "None") {
+      Write-Host "WARNING: this change REPLACES $replaced (new resource: new id, new IP or an empty table)." -ForegroundColor Red
+      Write-Host "Nothing has changed yet. Do not run apply unless the replacement is intended." -ForegroundColor Red
+    }
     Write-Host "Review it, then run: .\scripts\cfn.ps1 apply $Stack" -ForegroundColor Cyan
   }
 
@@ -184,6 +205,17 @@ switch ($Action) {
     Write-Host "Done: $status" -ForegroundColor Green
     Invoke-Native aws (@("cloudformation", "describe-stacks") + $common + @(
         "--query", "Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue}", "--output", "table", "--no-cli-pager"))
+    if ($Stack -eq "ec2") {
+      # API Gateway reaches the server by its private IP (apigw stack). If the server was replaced,
+      # that IP changed and the site returns 503 until apigw is updated.
+      $ip = Resolve-ParamValue "auto:ec2-private-ip"
+      $apigwIp = Get-Text @("cloudformation", "describe-stacks", "--region", $region, "--stack-name", "$Project-$Target-apigw",
+        "--query", "Stacks[0].Parameters[?ParameterKey=='Ec2PrivateIp'].ParameterValue", "--output", "text")
+      if ($apigwIp -and $apigwIp -ne $ip) {
+        Write-Host "The server's private IP changed ($apigwIp -> $ip): API Gateway still points at the old one." -ForegroundColor Yellow
+        Write-Host "Run now: .\scripts\cfn.ps1 plan apigw ; .\scripts\cfn.ps1 apply apigw" -ForegroundColor Yellow
+      }
+    }
   }
 
   "output" {

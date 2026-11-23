@@ -52,6 +52,19 @@ MAX_TICKET_CHARS = 20000
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 # Phase G5: read-only token for the support lead (console only; no review decisions, no imports)
 LEAD_TOKEN = os.environ.get("LEAD_TOKEN", "")
+# Named reviewers: "priya:<token>,omar:<token>" (SSM /paynest/demo/REVIEWER_TOKENS). Each approval or
+# rejection is recorded under the name its token belongs to, not a name typed into the form.
+REVIEWER_TOKENS = os.environ.get("REVIEWER_TOKENS", "")
+
+
+def reviewers() -> dict[str, str]:
+    """token -> reviewer name. Malformed entries and tokens shorter than 16 characters are ignored."""
+    out = {}
+    for item in (REVIEWER_TOKENS or "").split(","):
+        name, _, token = item.strip().partition(":")
+        if name.strip() and len(token.strip()) >= 16:
+            out[token.strip()] = name.strip()[:60]
+    return out
 # Phase 8: drafting from sources (off = fixed templates only) and the payroll API for tools.
 DRAFTING = os.environ.get("DRAFTING", "on")
 PAYROLL_API_URL = os.environ.get("PAYROLL_API_URL", "http://mock-payroll-api:8081")

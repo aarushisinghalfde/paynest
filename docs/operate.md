@@ -107,3 +107,14 @@ After each release, `cfn.ps1 plan agentcore` / `apply` rolls it to the new image
 `python scripts\run_evals.py --with-model --record`: drafts the labelled set with the model
 (masked text, capped at USD 1) and has a judge check each claim against the sources the drafter
 had. Gate: at least 90% of claims supported. Model-judged, so read it as indicative.
+
+## Named reviewers and alerts (pilot P1)
+
+- **Named reviewers:** in `.env`, `REVIEWER_TOKENS=priya:<32+ random chars>,omar:<32+ random chars>`, then
+  `.\scripts\put_secrets.ps1` and a restart. Each reviewer opens `/review` with their own token; every
+  approval or rejection is stored under that name (the form's name field is ignored). The shared
+  admin token still works but is recorded as `admin (...)`. Reviewers cannot import knowledge.
+- **Alarm email:** add `"AlarmEmail": "you@example.com"` to `infra/cfn/params/demo.json`, then
+  `cfn.ps1 plan observability` / `apply` and confirm the subscription email from AWS.
+- **Safer stack updates:** `cfn.ps1 plan` prints a red warning if a change would replace the server,
+  database, cache or vault table; `apply ec2` tells you to re-apply `apigw` if the server's IP changed.

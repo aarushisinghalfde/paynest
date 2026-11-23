@@ -11,6 +11,7 @@
     /paynest/demo/PII_HMAC_KEY
     /paynest/demo/ADMIN_TOKEN
     /paynest/demo/LEAD_TOKEN      (optional: read-only console for the support lead)
+    /paynest/demo/REVIEWER_TOKENS (optional: named reviewers, "name:token,name:token")
   Values are never printed. Re-run it whenever you change a value in .env.
 #>
 param(
@@ -23,7 +24,7 @@ $AwsProfile = "payce-fde"
 $Account = "665651551863"
 $Region = "ap-southeast-2"
 $KeyAlias = "alias/paynest-$Target"
-$Names = @("REDIS_URL", "OPENROUTER_API_KEY", "PII_HMAC_KEY", "ADMIN_TOKEN", "LEAD_TOKEN")
+$Names = @("REDIS_URL", "OPENROUTER_API_KEY", "PII_HMAC_KEY", "ADMIN_TOKEN", "LEAD_TOKEN", "REVIEWER_TOKENS")
 
 # Same sign-in and account check as cfn.ps1.
 Remove-Item Env:AWS_ACCESS_KEY_ID, Env:AWS_SECRET_ACCESS_KEY, Env:AWS_SESSION_TOKEN, Env:AWS_CREDENTIAL_EXPIRATION -ErrorAction SilentlyContinue

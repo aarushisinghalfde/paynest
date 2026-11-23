@@ -61,7 +61,7 @@ Resources:
           Fn::Sub: "${Project}-${Env}-RdsSecurityGroupId"
       PubliclyAccessible: false
       MultiAZ: false                    # demo: one instance; production would be Multi-AZ
-      BackupRetentionPeriod: 1          # 1 day of automatic backups (point-in-time restore)
+      BackupRetentionPeriod: 7          # 7 days of automatic backups (point-in-time restore); pilot minimum
       DeleteAutomatedBackups: true
       CopyTagsToSnapshot: true
       AutoMinorVersionUpgrade: true

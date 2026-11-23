@@ -51,7 +51,7 @@ they live in your `.env` and in SSM under `/paynest/demo/`.
 | What | Link |
 | --- | --- |
 | CloudFormation stacks | https://ap-southeast-2.console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks |
-| Demo EC2 instance | https://ap-southeast-2.console.aws.amazon.com/ec2/home?region=ap-southeast-2#InstanceDetails:instanceId=i-038b0f4a1eee1c90e |
+| Demo EC2 instance | https://ap-southeast-2.console.aws.amazon.com/ec2/home?region=ap-southeast-2#Instances:tag:Name=paynest-demo-server |
 | App logs (`/paynest/demo/app`) | https://ap-southeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-southeast-2#logsV2:log-groups/log-group/$252Fpaynest$252Fdemo$252Fapp |
 | Alarms | https://ap-southeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-southeast-2#alarmsV2: |
 | SSM parameters | https://ap-southeast-2.console.aws.amazon.com/systems-manager/parameters/?region=ap-southeast-2 |
@@ -70,7 +70,7 @@ git tag vX.Y.Z; git push origin vX.Y.Z
 # Secrets from .env into SSM
 .\scripts\put_secrets.ps1
 # Restart the app on the EC2 (pulls the images, runs migrations)
-aws ssm send-command --profile payce-fde --region ap-southeast-2 --instance-ids i-038b0f4a1eee1c90e --document-name AWS-RunShellScript --parameters "commands=['systemctl restart paynest']"
+aws ssm send-command --profile payce-fde --region ap-southeast-2 --instance-ids <id from .\scripts\demo.ps1 status> --document-name AWS-RunShellScript --parameters "commands=['systemctl restart paynest']"
 # Load the case data (phase 4) and run the gates
 $env:AWS_PROFILE = "payce-fde"; python scripts\run_phase4.py
 python scripts\check_phase3.py; python scripts\check_phase4.py; python scripts\check_phase5.py

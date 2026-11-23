@@ -15,7 +15,10 @@ param([switch]$Restart, [string]$ExpectVersion = "")
 $ErrorActionPreference = "Continue"
 $AwsProfile = "payce-fde"
 $Region = "ap-southeast-2"
-$InstanceId = "i-038b0f4a1eee1c90e"
+# The server is found by its Name tag, so a replaced instance (new id) needs no script change.
+$InstanceId = (aws ec2 describe-instances --region ap-southeast-2 --profile payce-fde `
+  --filters "Name=tag:Name,Values=paynest-demo-server" "Name=instance-state-name,Values=pending,running,stopping,stopped" `
+  --query "Reservations[0].Instances[0].InstanceId" --output text)
 $Health = "https://whps24ardd.execute-api.ap-southeast-2.amazonaws.com/api/health"
 $Log = "checks_{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmm")
 
@@ -85,6 +88,20 @@ foreach ($check in "check_phase4.py", "check_chat.py", "check_dashboard.py", "ch
 Say "=== run_evals.py (local) ==="
 python "scripts\run_evals.py" --record *>&1 | Tee-Object -FilePath $Log -Append
 $summary += "{0,-22} {1}" -f "run_evals.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
+# 7. Phase D/E checks, when their infrastructure exists (skipped, not failed, before the stacks are applied).
+$ErrorActionPreference = "Continue"
+$null = aws cloudformation describe-stacks --region $Region --stack-name paynest-demo-agentcore 2>$null
+if ($LASTEXITCODE -eq 0) {
+  Say "=== check_agentcore.py ==="
+  python "scripts\check_agentcore.py" *>&1 | Tee-Object -FilePath $Log -Append
+  $summary += "{0,-22} {1}" -f "check_agentcore.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" })
+} else { $summary += "{0,-22} {1}" -f "check_agentcore.py", "skipped (stack not applied)" }
+Say "=== check_traces.py ==="
+python "scripts\check_traces.py" *>&1 | Tee-Object -FilePath $Log -Append
+$summary += "{0,-22} {1}" -f "check_traces.py", $(if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL (needs the iam + ec2 updates)" })
+
+# 8. Evidence: the latest result of every gate into docs/PROJECT_STATE.md.
+python "scripts\evidence.py" *>&1 | Tee-Object -FilePath $Log -Append
 Say "Summary:"
 $summary | ForEach-Object { Say "  $_" }
 Say "Done. Log: $Log"

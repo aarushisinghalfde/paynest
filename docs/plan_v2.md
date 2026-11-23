@@ -15,17 +15,6 @@
 
 **Not doing:** India/UAE deployment, write actions on the payroll engine, training models on ticket data.
 
-## Status (23 Nov 2026)
+## Status
 
-| Phase | Status |
-|---|---|
-| A. Dashboard | Live PASS (v0.8.0) |
-| B. Knowledge import | Live PASS (v0.8.0) |
-| C. Evals + phase 7 gaps | Live 6/7/9 gates 5/5; local evals PASS. C2 faithfulness built (`--with-model`) |
-| D. Operate | `deploy.ps1` live; traces and Valkey switch built, waiting for `cfn.ps1` apply |
-| G. Support-head console | Built (decision record, buckets, trust signals, translation, lead token); ships in v0.9.0 |
-| E. AgentCore | Model-steps runtime + stack + check built; waiting for release and `cfn.ps1 apply agentcore` |
-| F. Handover | architecture.md, operate.md updated |
-| Bedrock | Client built; account returns "Operation not allowed" for every model, AWS Support case open |
-
-Details: [operate.md](operate.md), [architecture.md](architecture.md) section 11.
+Tracked in [PROJECT_STATE.md](PROJECT_STATE.md) (the one status file).

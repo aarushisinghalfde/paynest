@@ -6,6 +6,7 @@
     "CloudFrontPrefixListId": "auto:cloudfront",
     "OriginDomain": "auto:ec2-dns",
     "Ec2PrivateIp": "auto:ec2-private-ip",
-    "ImageTag": "auto:latest-tag"
+    "ImageTag": "auto:latest-tag",
+    "AmiId": "auto:current-ami"
   }
 }

@@ -161,3 +161,10 @@ def test_an_acknowledgement_is_not_a_resolution():
     ack = {"route": "reply", "agent_status": "replied", "decision": {"answer": {"tier": "template"}}}
     answered = {"route": "reply", "agent_status": "replied", "decision": {"answer": {"tier": "fallback"}}}
     assert console.bucket(ack) == "human" and console.bucket(answered) == "resolved"
+
+
+def test_named_reviewer_tokens_are_parsed_and_weak_ones_ignored(monkeypatch):
+    from shared import settings
+
+    monkeypatch.setattr(settings, "REVIEWER_TOKENS", " priya:aaaaaaaaaaaaaaaaaaaa , omar:short, :bbbbbbbbbbbbbbbbbbbb, x")
+    assert settings.reviewers() == {"aaaaaaaaaaaaaaaaaaaa": "priya"}
