@@ -157,6 +157,14 @@ Rules:
 - Reply in {language}.
 Return JSON: {{"reply": "...", "citations": ["id", ...], "answerable": true|false}}"""
 
+# Steps without the model: the article text is English, so only languages written in Latin script get them
+# (Hinglish readers read English menu names); Hindi and Arabic get the guide's link or a person.
+STEPS_INTRO = {
+    "en": ("Here's how, from the Payce guide \u201c{title}\u201d",
+           "Did that solve it? If a step looks different on your screen, tell me which one.", "Full guide"),
+    "hi-Latn": ("Yeh raha tareeka, Payce guide \u201c{title}\u201d se",
+                "Kya isse ho gaya? Agar koi step aapki screen par alag dikhe, to bataiye kaunsa.", "Poori guide"),
+}
 GUIDE_LINK = {
     "en": "Here is the Payce guide with the steps: \u201c{title}\u201d {url} [{cite}]\nIf a step looks different on "
     "your screen, tell me which one and I'll help.",
@@ -233,12 +241,12 @@ def draft_howto(state: dict, articles: list[dict], model=None, rung: int = 1) ->
         except (BudgetExceeded, ModelError):
             pass
     top = articles[0]
-    if top["score"] >= GUIDE_MIN and top.get("url") and not (top.get("steps") and lang == "en"):
+    if top["score"] >= GUIDE_MIN and top.get("url") and not (top.get("steps") and lang in STEPS_INTRO):
         # no steps we can put in their language, but the guide has a page: give them the link
         reply = GUIDE_LINK.get(lang, GUIDE_LINK["en"]).format(title=top.get("title") or "", url=top["url"],
                                                               cite=top["chunk_id"])
         return {"reply": reply, "citations": [top["chunk_id"]], "answerable": True, "mode": "fallback"}
-    if top["score"] < GUIDE_MIN or not top.get("steps") or lang != "en":
+    if top["score"] < GUIDE_MIN or not top.get("steps") or lang not in STEPS_INTRO:
         # Only a title, or steps we cannot put in the customer's language without the model: a person
         # answers with the exact steps. A guide name and "which part are you stuck on?" is not an answer.
         return None
@@ -246,7 +254,7 @@ def draft_howto(state: dict, articles: list[dict], model=None, rung: int = 1) ->
     steps = customer_steps(top["steps"])
     if len(steps) > 900:
         steps = steps[:900].rsplit("\n", 1)[0] + "\n…"
-    reply = (f"Here's how, from the Payce guide \u201c{top.get('title') or kb}\u201d [{top['chunk_id']}]:\n"
-             f"{steps}\n\n" + (f"Full guide: {top['url']}\n\n" if top.get("url") else "")
-             + "Did that solve it? If a step looks different on your screen, tell me which one.")
+    intro, outro, full = STEPS_INTRO[lang]
+    reply = (intro.format(title=top.get("title") or kb) + f" [{top['chunk_id']}]:\n{steps}\n\n"
+             + (f"{full}: {top['url']}\n\n" if top.get("url") else "") + outro)
     return {"reply": reply, "citations": [top["chunk_id"]], "answerable": True, "mode": "fallback"}

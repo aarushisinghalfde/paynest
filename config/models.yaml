@@ -46,3 +46,7 @@ defaults:
   # classifier layers agree. 0.5 is fine for picking a team queue (a wrong queue is re-routed); it is
   # not enough to answer a customer. Below this the answer waits for a person's approval.
   answer_auto_at: 0.8
+  # ...or when a written How-To guide matches the question at least this strongly (retrieval score) and
+  # well ahead of the next guide: an information question, the guide is the evidence. Demo guides: real
+  # matches score 5-13, loose ones ("kaise download karun slip?") about 3.
+  guide_auto_at: 5.0

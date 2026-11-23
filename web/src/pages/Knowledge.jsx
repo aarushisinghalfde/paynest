@@ -102,7 +102,7 @@ export default function Knowledge() {
               <tbody>
                 {list.articles.map((a) => (
                   <tr key={a.kb_id}><td>{a.kb_id}</td><td>{a.title}</td><td>{a.region}</td><td>{a.chunks}</td>
-                    <td>{String(a.topic).startsWith('statutory') ? 'Reviewed only' : 'How-To'}</td>
+                    <td>{String(a.topic).startsWith('statutory') ? 'Reviewed only' : 'How-To'}{a.imported_by === 'demo-guides' && <span style={{ color: MUTED }}> (demo guide, replace with the real article)</span>}</td>
                     <td><button className="small" onClick={() => withdraw(a.kb_id)}>Withdraw</button></td></tr>
                 ))}
               </tbody>

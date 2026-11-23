@@ -67,6 +67,8 @@ def reviewers() -> dict[str, str]:
     return out
 # Phase 8: drafting from sources (off = fixed templates only) and the payroll API for tools.
 DRAFTING = os.environ.get("DRAFTING", "on")
+# Demo How-To guides (data/demo_guides): imported at worker start for guides that have no real article yet.
+DEMO_GUIDES = os.environ.get("DEMO_GUIDES", "on" if REGION == "demo" else "off").lower() == "on"
 # Help-centre hosts an imported guide link may point to (comma-separated). Empty: any https link given
 # in the article's own front matter (replies may still only carry the link of a guide they used).
 HELP_DOMAINS = {d.strip().lower() for d in os.environ.get("HELP_DOMAINS", "").split(",") if d.strip()}

@@ -545,3 +545,26 @@ handover. Waiting on approval or AWS:
 
 Open items: alarm email; CloudFront account verification; delete the failed cloudfront stack;
 `demo.ps1 stop` when idle.
+
+## What the agent may do on its own (decision policy)
+
+The agent resolves information questions itself and hands every request to *do* something with money or
+personal data to a person. What the customer asks for decides this, not only the team. Rules:
+`config/risk.yaml` (what counts as a money, data or legal request, and the approval limits) and
+`config/router.yaml` (first matching rule wins; every ticket records the rule and the reason).
+
+| The customer asks for | The agent | Who decides | Rule |
+| --- | --- | --- | --- |
+| Information: how to do something in Payce | Answers with the steps from the guide, in the customer's language | Nobody: sent when a written guide clearly matches (score >= 5, well ahead of the next) or the classifiers agree at >= 0.8 | R11-howto |
+| The status of their payroll run | Answers from the payroll API | Nobody | R99-default |
+| A statutory figure (PF ceiling, TDS, gratuity, WPS format) | Drafts it from the dated rule table | A payroll specialist approves before it is sent | R07-statutory |
+| A refund, reversal, off-cycle payment, bank-details change or an approval | Tells the customer a specialist will check it; never moves money | A payroll specialist (Payroll-L2) | R06d-money |
+| ...for INR 1 lakh / AED 5,000 / USD 1,500 or more | The same, and says a finance lead approves too | A payroll specialist and a finance lead (Finance-Approvals) | R06b-money-second-approver |
+| Salary or a payment not credited, failed or blocked | Tells the customer a specialist is checking it now | Payroll-L2, as P1 (after statutory, so a rejected WPS file gets a drafted fix) | R08b-pay-at-risk |
+| Another employee's salary or payslip, data export or deletion, or a message carrying ID or bank numbers with a request | Tells the customer the privacy team handles it; asks them not to send ID or bank numbers in chat | Privacy-Desk | R06e-private-data |
+| A legal or regulatory complaint | Tells the customer the support lead will reply personally | Support-Lead | R06a-legal |
+
+Every reply, whoever writes it, passes the output guard (15 checks) before it is sent. A How-To answer
+must carry real steps or the guide's own link, and never ids, scores or masked contact lines.
+The amount in a reply is repeated in the customer's own words ("2 lakh"); the approver sees it
+normalised ("INR 200,000").

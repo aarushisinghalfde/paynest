@@ -359,10 +359,11 @@ class PgAgentStore(PgTicketStore):
 
     def list_imports(self) -> dict:
         with self._conn() as conn:
-            rows = conn.execute("""SELECT kb_id, title, region, language, topic, chunks, masked_counts, imported_at
+            rows = conn.execute("""SELECT kb_id, title, region, language, topic, chunks, masked_counts, imported_at,
+                                          imported_by
                                    FROM knowledge_imports WHERE active ORDER BY imported_at DESC""").fetchall()
             lib = conn.execute("SELECT source, count(*) FROM howto_answers WHERE active GROUP BY source").fetchall()
-        keys = ("kb_id", "title", "region", "language", "topic", "chunks", "masked_counts", "imported_at")
+        keys = ("kb_id", "title", "region", "language", "topic", "chunks", "masked_counts", "imported_at", "imported_by")
         return {"articles": [dict(zip(keys, r, strict=True)) for r in rows], "library": dict(lib)}
 
     def import_answers(self, rows, imported_by=None) -> int:
@@ -606,7 +607,8 @@ class MemoryAgentStore(MemoryTicketStore):
             self.kb += [{"chunk_id": f"{a.kb_id}#article{i}", "kb_id": a.kb_id, "source_kind": "kb_article",
                          "region": a.region, "topic": a.topic, "title": a.title, "content": t}
                         for i, t in enumerate(a.chunks, start=1)]
-            self.imports[a.kb_id] = {"created_title": not had, "title": a.title, "chunks": len(a.chunks)}
+            self.imports[a.kb_id] = {"created_title": not had, "title": a.title, "chunks": len(a.chunks),
+                                     "imported_by": imported_by}
             out.append({"kb_id": a.kb_id, "title": a.title, "chunks": len(a.chunks), "topic": a.topic,
                         "masked": sum(a.masked_counts.values()), "new_title": not had})
         return out

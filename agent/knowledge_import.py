@@ -111,6 +111,20 @@ def guide_url(filename: str, url: str | None) -> str | None:
     return url.strip()
 
 
+def demo_guides(store, folder=None) -> list[dict]:
+    """Import the demo How-To guides (data/demo_guides) for guides with no imported article yet. A real
+    article imported on the Knowledge page is never overwritten, and replaces the demo one when it comes."""
+    from pathlib import Path
+
+    from shared import settings
+
+    folder = Path(folder or settings.ROOT / "data" / "demo_guides")
+    have = {a["kb_id"] for a in (store.list_imports().get("articles") or [])}
+    todo = [parse_article(p.name, p.read_text(encoding="utf-8")) for p in sorted(folder.glob("KB-*.md"))]
+    todo = [a for a in todo if a.kb_id not in have]
+    return store.import_articles(todo, imported_by="demo-guides") if todo else []
+
+
 def parse_article(filename: str, text: str) -> Article:
     if len(text) > MAX_BODY:
         raise ValueError(f"{filename}: larger than {MAX_BODY:,} characters")

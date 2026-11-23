@@ -36,6 +36,32 @@ rules:
     when: {jira: true}
     route: review
     reason: "matches Jira {jira_key}: reply with the known-issue status, after review"
+  # ---- Risk policy (config/risk.yaml): requests to DO something with money or personal data. The agent
+  # tells the customer exactly what happens next and hands the ticket to the right person; it never acts.
+  - id: R06a-legal
+    when: {legal: true}
+    route: queue
+    queue: Support-Lead
+    reply: legal
+    reason: "legal or regulatory complaint: the support lead replies personally"
+  - id: R06b-money-second-approver
+    when: {money: true, second_approver: true}
+    route: queue
+    queue: Finance-Approvals
+    reply: money_high
+    reason: "{money_kind} of {amount} (at or above {limit}): a payroll specialist and a finance lead approve; the agent never moves money"
+  - id: R06d-money
+    when: {money: true, pay_at_risk: false}
+    route: queue
+    queue: Payroll-L2
+    reply: money
+    reason: "{money_kind}{amount_text}: a payroll specialist approves; the agent never moves money"
+  - id: R06e-private-data
+    when: {private: true}
+    route: queue
+    queue: Privacy-Desk
+    reply: private
+    reason: "personal data request ({private_kind}): the privacy desk handles it, the model never does"
   - id: R07-statutory
     when: {team: Statutory}
     route: review
@@ -44,6 +70,13 @@ rules:
     when: {priority_signal: true}
     route: review
     reason: "P1 signal (payroll cannot run / pay or filing at risk): human approval"
+  - id: R08b-pay-at-risk
+    # after statutory (a WPS/SIF rejection gets a drafted fix a person approves) and P1 (model signal)
+    when: {pay_at_risk: true}
+    route: queue
+    queue: Payroll-L2
+    reply: money
+    reason: "P1, pay at risk ({money_kind}): a payroll specialist checks the payment now"
   - id: R09-clarify
     when: {branch: clarify}
     route: queue

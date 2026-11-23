@@ -89,7 +89,44 @@ HANDOFF = {
 }
 
 
+# Risk policy replies (config/risk.yaml): the agent never moves money or releases personal data. It says
+# plainly who does, so the customer knows what happens next. No promise of an outcome or a time.
+MONEY = {
+    "en": "I can't approve or move money myself. I've passed your request{amount} to a payroll specialist, who will "
+    "check it and reply here (ticket {ref}). Refunds and payment changes always need a person's approval.",
+    "hi-Latn": "Main khud paise approve ya transfer nahi kar sakta. Maine aapki request{amount} ek payroll specialist "
+    "ko bhej di hai, wo check karke yahin jawab denge (ticket {ref}). Refund aur payment changes hamesha ek vyakti "
+    "approve karta hai.",
+    "hi": "मैं खुद पैसे स्वीकृत या ट्रांसफ़र नहीं कर सकता। मैंने आपका अनुरोध{amount} एक पेरोल विशेषज्ञ को भेज दिया है, "
+    "वे जाँच कर यहीं जवाब देंगे (टिकट {ref})। रिफ़ंड और भुगतान बदलाव हमेशा एक व्यक्ति स्वीकृत करता है।",
+    "ar": "لا يمكنني الموافقة على الأموال أو تحويلها بنفسي. أحلت طلبك{amount} إلى أخصائي رواتب سيتحقق منه ويرد هنا "
+    "(التذكرة {ref}). المبالغ المستردة وتغييرات الدفع تحتاج دائماً إلى موافقة شخص.",
+}
+MONEY_HIGH = {k: v + {"en": " Because of the amount, a finance lead approves it as well.",
+                      "hi-Latn": " Amount zyada hone ki wajah se finance lead bhi ise approve karenge.",
+                      "hi": " राशि अधिक होने के कारण फ़ाइनेंस लीड भी इसे स्वीकृत करेंगे।",
+                      "ar": " نظراً لقيمة المبلغ، يوافق عليه أيضاً مسؤول المالية."}[k] for k, v in MONEY.items()}
+PRIVATE = {
+    "en": "For your security, requests about personal or bank details are handled by our privacy team, not by the "
+    "assistant. They will reply here (ticket {ref}). Please don't send ID or bank numbers in this chat.",
+    "hi-Latn": "Aapki suraksha ke liye personal ya bank details wali requests hamari privacy team dekhti hai, assistant "
+    "nahi. Wo yahin jawab denge (ticket {ref}). Kripya is chat mein ID ya bank number na bhejein.",
+    "hi": "आपकी सुरक्षा के लिए व्यक्तिगत या बैंक विवरण से जुड़े अनुरोध हमारी प्राइवेसी टीम देखती है। वे यहीं जवाब देंगे "
+    "(टिकट {ref})। कृपया इस चैट में ID या बैंक नंबर न भेजें।",
+    "ar": "حفاظاً على أمانك، يتولى فريق الخصوصية لدينا الطلبات المتعلقة بالبيانات الشخصية أو المصرفية. سيرد الفريق هنا "
+    "(التذكرة {ref}). يرجى عدم إرسال أرقام الهوية أو الحسابات المصرفية في هذه المحادثة.",
+}
+LEGAL = {
+    "en": "I've passed your message to our support lead, who will reply to you personally (ticket {ref}).",
+    "hi-Latn": "Maine aapka message hamare support lead ko bhej diya hai, wo aapko khud jawab denge (ticket {ref}).",
+    "hi": "मैंने आपका संदेश हमारे सपोर्ट लीड को भेज दिया है, वे आपको स्वयं जवाब देंगे (टिकट {ref})।",
+    "ar": "أحلت رسالتك إلى مسؤول الدعم لدينا، وسيرد عليك شخصياً (التذكرة {ref}).",
+}
+
+
 def render(kind: str, language: str, **kw) -> str:
     table = {"ack": ACK, "incident": INCIDENT, "duplicate": DUPLICATE, "greeting": GREETING, "thanks": THANKS,
-             "clarify": CLARIFY, "status": STATUS, "handoff": HANDOFF, "howto_handoff": HOWTO_HANDOFF}.get(kind, BLOCKED)
+             "clarify": CLARIFY, "status": STATUS, "handoff": HANDOFF, "howto_handoff": HOWTO_HANDOFF,
+             "money": MONEY, "money_high": MONEY_HIGH, "private": PRIVATE, "legal": LEGAL}.get(kind, BLOCKED)
+    kw.setdefault("amount", "")
     return table.get(language, table["en"]).format(**kw)

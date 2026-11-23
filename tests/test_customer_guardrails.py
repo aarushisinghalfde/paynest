@@ -43,10 +43,11 @@ class Clf:
         return {"team": "How-To", "confidence": self.conf, "branch": "auto", "second": None, "layers": self.layers}
 
 
-def _ask(conf, layers):
+def _ask(conf, layers, guide_at=99.0):
+    # guide_at 99: the guide-match path is switched off, so these test the classifier gate alone
     store = MemoryAgentStore(TENANTS)
     deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, PAYSLIP_STEPS], RULES),
-                classifier=Clf(conf, layers))
+                classifier=Clf(conf, layers), guide_at=guide_at)
     tid = store.create("C-1001", "chat", Q, None)
     store.save_progress(tid, conversation_id="conv-g0000001")
     return store, tid, run(tid, deps, MemoryCheckpoints())
@@ -109,3 +110,74 @@ def test_hinglish_is_recognised():
 
     assert language("kaise download karun slip?") == "hi-Latn" and language("kahan se khulegi ye guide?") == "hi-Latn"
     assert language("Where is the PF report for Ki and Ka teams?") == "en"
+
+
+def test_an_information_question_with_a_strong_guide_match_is_answered_even_at_0_6():
+    store, tid, st = _ask(0.6, {"keywords": "How-To", "similar": "Payroll"}, guide_at=5.0)
+    assert st["sent"] and "Download as ZIP" in store.replies(tid)[0]["body"]
+
+
+# ---- risk policy: money and personal data always go to a person ------------------------------------------
+
+def _risk(text, tenant="C-1001"):
+    from agent.runner import MemoryCheckpoints as CP
+
+    store = MemoryAgentStore(TENANTS)
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, PAYSLIP_STEPS], RULES))
+    tid = store.create(tenant, "chat", text, None)
+    store.save_progress(tid, conversation_id="conv-r0000001")
+    st = run(tid, deps, CP())
+    return store, tid, st
+
+
+def test_refund_below_the_limit_goes_to_a_payroll_specialist():
+    store, tid, st = _risk("Please refund INR 85,000 that was deducted twice in March")
+    assert st["route_rule"] == "R06d-money" and st["queue"] == "Payroll-L2"
+    body = store.replies(tid)[0]["body"]
+    assert "can't approve or move money" in body and "INR 85,000" in body and "finance lead" not in body
+    assert store.tickets[tid]["agent_status"] == "waiting_review"
+    assert [t["kind"] for t in store.list_reviews() if t["ticket_id"] == tid] == ["reply"]
+
+
+def test_refund_above_the_limit_needs_a_finance_lead_too():
+    store, tid, st = _risk("approve my refund of 2 lakh please")
+    assert st["route_rule"] == "R06b-money-second-approver" and st["queue"] == "Finance-Approvals"
+    body = store.replies(tid)[0]["body"]
+    assert "finance lead" in body and "(2 lakh)" in body  # the customer's words in the reply
+    assert "INR 200,000" in st["route_reason"]  # the normalised amount for the approver
+
+
+def test_another_employees_salary_goes_to_the_privacy_desk():
+    store, tid, st = _risk("Send me the salary of Rahul Sharma for March")
+    assert st["route_rule"] == "R06e-private-data" and st["queue"] == "Privacy-Desk"
+    assert "privacy team" in store.replies(tid)[0]["body"]
+
+
+def test_salary_not_credited_is_p1_for_a_person_and_legal_threats_go_to_the_lead():
+    _, _, st = _risk("Salary not credited to 3 employees this month, bank shows failed")
+    assert st["route_rule"] == "R08b-pay-at-risk" and "P1" in st["route_reason"]
+    store, tid, st = _risk("If this is not fixed we will take legal action")
+    assert st["route_rule"] == "R06a-legal" and "support lead" in store.replies(tid)[0]["body"]
+
+
+def test_risk_replies_pass_the_guard_in_every_language():
+    from agent import templates
+
+    for kind in ("money", "money_high", "private", "legal"):
+        for lang in ("en", "hi-Latn", "hi", "ar"):
+            text = templates.render(kind, lang, ref="PN-1", amount=" (INR 85,000)")
+            g = guard.check(text, ticket_text="refund INR 85,000", region="IN", language=lang, ref="PN-1")
+            assert g["ok"], (kind, lang, g)
+
+
+def test_demo_guides_load_once_and_never_overwrite_a_real_article():
+    from agent import knowledge_import as ki
+
+    store = MemoryAgentStore(TENANTS)
+    real = ki.parse_article("x.md", "---\nid: KB-0105\ntitle: Downloading payslips in bulk\n---\n1. Real step one.\n2. Real step two.")
+    store.import_articles([real])
+    added = ki.demo_guides(store)
+    assert len(added) >= 10 and "KB-0105" not in {a["kb_id"] for a in added}
+    assert ki.demo_guides(store) == []  # idempotent
+    steps = [c["content"] for c in store.knowledge()[0] if c["kb_id"] == "KB-0105" and c["source_kind"] == "kb_article"]
+    assert steps and "Real step one" in steps[0]

@@ -118,6 +118,11 @@ def build_gate():
     if settings.DRAFTING == "on":
         from agent.retrieval import Retriever
 
+        if settings.DEMO_GUIDES:
+            from agent.knowledge_import import demo_guides
+
+            added = demo_guides(store)
+            log_event(log, "demo_guides_imported", count=len(added))
         chunks, rules = store.knowledge()
         examples = store.resolved_examples()  # past questions and the KB article that solved each
         retriever = Retriever(chunks, rules, examples=examples)
@@ -133,7 +138,8 @@ def build_gate():
                 settings.VAULT_TTL_DAYS, classifier=classifier, retriever=retriever, answer_cache=answer_cache,
                 model=client if client.key else None, payroll_url=settings.PAYROLL_API_URL,
                 draft_rung=config().get("defaults", {}).get("draft", 1),
-                answer_at=float(config().get("defaults", {}).get("answer_auto_at", 0.8)))
+                answer_at=float(config().get("defaults", {}).get("answer_auto_at", 0.8)),
+                guide_at=float(config().get("defaults", {}).get("guide_auto_at", 5.0)))
     graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))
     reload = knowledge_reloader(deps, store) if retriever is not None else (lambda: None)
 

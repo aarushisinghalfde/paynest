@@ -25,14 +25,28 @@ def facts_from_state(state: dict) -> dict:
         "jira": bool(state.get("jira_key")), "jira_key": state.get("jira_key"),
         "team": state.get("team"), "second": c.get("second"), "branch": c.get("branch", "auto"),
         "priority_signal": bool(c.get("priority_signal")),
+        **_risk_facts(state.get("risk") or {}),
         "smalltalk": state.get("talk") in ("greeting", "thanks", "status"),
         "vague": state.get("talk") == "vague",
+    }
+
+
+def _risk_facts(r: dict) -> dict:
+    kinds = {"refund": "refund", "reversal": "payment reversal", "payment_blocked": "blocked or missing payment",
+             "bank_change": "bank details change", "off_cycle": "off-cycle payment", "approve_payroll": "approval request"}
+    return {
+        "money": bool(r.get("money")), "money_kind": ", ".join(kinds.get(k, k) for k in r.get("money") or []),
+        "pay_at_risk": "payment_blocked" in (r.get("money") or []),
+        "second_approver": bool(r.get("second_approver")), "amount": r.get("amount"), "limit": r.get("limit"),
+        "amount_text": f" of {r['amount']}" if r.get("amount") else "",
+        "private": bool(r.get("private")), "private_kind": ", ".join(r.get("private") or []).replace("_", " "),
+        "legal": bool(r.get("legal")),
     }
 
 
 def decide(facts: dict) -> dict:
     for rule in rules():
         if all(facts.get(k) == v for k, v in rule["when"].items()):
-            return {"route": rule["route"], "rule": rule["id"], "queue": rule.get("queue"),
+            return {"route": rule["route"], "rule": rule["id"], "queue": rule.get("queue"), "reply": rule.get("reply"),
                     "reason": rule["reason"].format_map({k: (v if v is not None else "?") for k, v in facts.items()})}
     raise RuntimeError("router has no default rule")

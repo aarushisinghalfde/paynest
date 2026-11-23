@@ -20,6 +20,7 @@ from agent import (
     injection,
     keywords,
     retrieval,
+    risk,
     router,
     templates,
     tools,
@@ -44,6 +45,7 @@ class Deps:
     draft_rung: int = 1
     answer_cache: object = None  # agent.answer_cache (How-To answers): checked before RAG
     answer_at: float = 0.8  # confidence needed to SEND an agent-written answer without a person (models.yaml)
+    guide_at: float = 5.0  # ...or a written guide matched at least this strongly (an information question)
 
 
 def _step(state, name):
@@ -151,6 +153,7 @@ def classify(state, deps: Deps):
         "team": c["team"],
         "confidence": c["confidence"],
         "classification": c,
+        "risk": risk.assess(text, (state.get("tenant") or {}).get("region")),
         "steps": _step(state, "classify"),
     }
 
@@ -183,7 +186,7 @@ def dedupe(state, deps: Deps):
 def route(state, deps: Deps):
     d = router.decide(router.facts_from_state(state))
     return {"route": d["route"], "route_reason": d["reason"], "route_rule": d["rule"], "queue": d.get("queue"),
-            "steps": _step(state, "route")}
+            "reply_template": d.get("reply"), "steps": _step(state, "route")}
 
 
 def _iso(v):
@@ -194,6 +197,11 @@ def draft(state, deps: Deps):
     ref = state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8]
     route_ = state.get("route")
     out = {"draft_version": state.get("draft_version", 0) + 1, "steps": _step(state, "draft")}
+    if state.get("reply_template"):  # risk policy: say exactly what happens next; a person takes it from here
+        r = (state.get("risk") or {})
+        text = templates.render(state["reply_template"], state.get("language", "en"), ref=ref,
+                                amount=f" ({r['amount_said']})" if r.get("amount_said") else "")
+        return {**out, "draft": text, "draft_mode": "template", "handoff": True}
     queued = route_ == "queue" and state.get("tenant") is not None  # triage/pod queue, known tenant
     if deps.retriever is not None and (route_ in ("reply", "review") or queued):
         q = _question(state)
@@ -351,8 +359,9 @@ def send(state, deps: Deps):
         # The customer was told a person will reply with the steps. If this ticket opened the knowledge task,
         # approving it answers them; otherwise (the task is another customer's) a person replies to this one.
         if not wrote_task:
-            deps.store.create_review(state["ticket_id"], state["draft_version"] + 2, "",
-                                     "How-To with no written steps: write this customer's reply (the steps)")
+            why = (f"{state.get('queue') or 'a person'}: {state.get('route_reason')}" if state.get("reply_template")
+                   else "How-To with no written steps: write this customer's reply (the steps)")
+            deps.store.create_review(state["ticket_id"], state["draft_version"] + 2, "", why)
         deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common,
                                  decision=decision.record(state, "waiting_review"))
     return {"sent": True, "meta": {**state.get("meta", {}), "sent_now": sent_now}, "steps": _step(state, "send")}
@@ -371,6 +380,16 @@ def _unsure(state, deps: Deps) -> str | None:
     disagree = len(set(layers)) > 1
     if conf >= deps.answer_at and not disagree:
         return None
+    # An information question answered from a written guide that clearly matches it ("where do I download
+    # payslips?") needs no person: the guide match is the evidence, whatever the team classifier said.
+    src = state.get("sources") or {}
+    hits = src.get("hits") or []
+    if state.get("draft_mode") in ("model", "fallback") and hits and hits[0].get("has_steps"):
+        runner_up = hits[1].get("score", 0) if len(hits) > 1 else 0
+        if hits[0].get("score", 0) >= deps.guide_at and hits[0]["score"] >= 1.5 * runner_up:
+            return None
+    if state.get("draft_mode") == "cache" and (src.get("cache_similarity") or 0) >= 0.9:
+        return None  # the same question, already answered from a guide and sent
     why = "the classifiers disagreed" if disagree else f"confidence {conf:.2f} is below {deps.answer_at:.2f}"
     return f"answer ready, but {why}: a person approves it before the customer sees it"
 

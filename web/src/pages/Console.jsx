@@ -454,8 +454,12 @@ const sourceTitles = (a) => {
   const used = src.filter((h, i) => cites.includes(h.id) || (!cites.length && i === 0))
   return [...new Set(used.map((h) => h.title).filter(Boolean))]
 }
+const HANDED = { 'Payroll-L2': 'a payroll specialist', 'Finance-Approvals': 'a payroll specialist and a finance lead',
+  'Privacy-Desk': 'the privacy desk', 'Support-Lead': 'the support lead' }
 function plainOutcome(t, d, task) {
-  const a = d.answer || {}, m = d.merge || {}
+  const a = d.answer || {}, m = d.merge || {}, r = d.route || {}
+  // risk policy: money, personal data or legal. The agent told the customer who takes it; it never acts.
+  if (HANDED[r.queue]) return `Handed to ${HANDED[r.queue]}: ${r.reason}.`
   const by = { library: 'an answer our team approved', cache: 'an answer already given for the same question',
     model: 'the guide', fallback: 'the guide' }[a.tier]
   switch (t.bucket) {

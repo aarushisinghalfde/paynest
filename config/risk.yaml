@@ -1,0 +1,28 @@
+# What the agent may do on its own is decided by what the customer ASKS FOR, not only by the team.
+# The agent never moves money, changes bank details or releases personal data: those go to a person,
+# and the amount and the kind of data decide which person. Matched on masked text (amounts are kept,
+# bank and ID numbers are already tokens such as <ACCOUNT_1>, <IBAN_1>, <PAN_1>).
+
+# At or above this amount a money request needs a finance lead as a second approver.
+second_approver_at:
+  INR: 100000     # 1 lakh
+  AED: 5000
+  USD: 1500
+
+# Requests to do something with money. Any match: a payroll specialist approves; the agent never acts.
+money_actions:
+  refund: '\b(refund|reimburse|money back|paisa wapas|wapas (karo|kar do|chahiye)|استرداد)'
+  reversal: '\b(revers(e|al)|recall|cancel (the |this |our )?(payment|transfer|payroll|run))'
+  payment_blocked: '\b(salary|payment|transfer|wps|bank file)\b.{0,40}\b(blocked|stuck|on hold|failed|rejected|bounced|not (been )?(credited|received|paid))|\bnot (been )?credited\b|\bsalary nahi aay'
+  bank_change: '\b(change|update|replace)\b.{0,30}\b(bank|account number|iban|ifsc)\b'
+  off_cycle: '\b(off-cycle|off cycle|advance salary|salary advance|manual payment|pay (him|her|them|the employee) (now|today))\b'
+  approve_payroll: '\b(approve|release|unlock)\b.{0,20}\b(payroll|run|payment|refund)\b'
+
+# Requests that touch personal data. Any match: the privacy desk handles it, never the model.
+private_data:
+  other_employee: '\b(salary|ctc|payslip|pay slip|bank details|pan|aadhaar)\b.{0,15}\bof <NAME_\d+>|<NAME_\d+>.{0,6}\b(salary|ctc|payslip)\b'
+  data_request: '\b(delete|erase|remove|export)\b.{0,25}\b(data|records|account)\b|\b(gdpr|dpdp|right to (erasure|be forgotten))\b'
+  identity_numbers: '<(PAN|AADHAAR|EMIRATES_ID|PASSPORT|IBAN|ACCOUNT)_\d+>'
+
+# Complaints with legal or regulatory weight. The support lead replies personally.
+legal: '\b(lawyer|legal (action|notice)|consumer (court|forum)|sue|labou?r (court|ministry|department)|mohre|ombudsman)\b'
