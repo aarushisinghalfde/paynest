@@ -24,7 +24,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_chat import URL, run_case  # noqa: E402
+from check_chat import URL, internal, run_case  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -59,8 +59,8 @@ def main() -> int:
     def classify_live():
         got = []
         for tenant, text, want in CLASSIFY:
-            _, t = run_case(base, tenant, text)
-            got.append((want, t.get("team")))
+            tid, _ = run_case(base, tenant, text)
+            got.append((want, internal(base, tid).get("team") or "(no admin token)"))
         right = sum(w == g for w, g in got)
         wrong = [f"{w}->{g}" for w, g in got if w != g]
         return right >= len(CLASSIFY) - 1, f"{right}/{len(CLASSIFY)} to the right team; wrong: {wrong or 'none'}"
@@ -90,9 +90,9 @@ def main() -> int:
                                                       f"replied: {bool(reply)}")
 
     def statutory_review():
-        _, t = run_case(base, "C-1001", "How do I see the PF wage ceiling for September 2026?")
+        tid, t = run_case(base, "C-1001", "How do I see the PF wage ceiling for September 2026?")
         ok = t.get("route") == "review" and t.get("agent_status") == "waiting_review" and not t.get("replies")
-        return ok, f"team {t.get('team')}, route {t.get('route')}, {t.get('agent_status')}"
+        return ok, f"team {internal(base, tid).get('team')}, route {t.get('route')}, {t.get('agent_status')}"
 
     gate("phase6_classify_live", classify_live)
     gate("phase7_duplicate_live", duplicate_live)

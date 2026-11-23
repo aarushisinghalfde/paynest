@@ -175,7 +175,8 @@ def dedupe(state, deps: Deps):
     recent = deps.store.recent_tickets(state["tenant_id"], created, state["ticket_id"])
     dup, why = dd.find_duplicate(text, created, recent)
     out = {"duplicate_of": dup, "duplicate_reason": why}
-    if not dup:
+    # an outage is a burst of problem reports; five people asking the PF ceiling is not an incident
+    if not dup and not conversation.asks_statutory_figure(text):
         inc = dd.find_incident(text, created, recent, deps.store.open_incidents(state["tenant_id"]))
         if inc.get("opened"):
             deps.store.open_incident(inc["incident_id"], state["tenant_id"], state.get("team"), inc["signature"],
