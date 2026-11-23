@@ -27,6 +27,15 @@ const EXAMPLES = [
   'What is the status of payroll run PR-202609?',
 ]
 
+// Links in a reply are clickable. The guardrails only let through the link of a guide the reply used.
+function Linked({ text }) {
+  if (typeof text !== 'string') return text
+  return text.split(/(https:\/\/[^\s<>"')\]]+)/g).map((part, i) => (
+    /^https:\/\//.test(part)
+      ? <a key={i} href={part.replace(/[.,;:!?]+$/, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#1f5f8b' }}>{part}</a>
+      : part))
+}
+
 function Bubble({ who, children, sub }) {
   const mine = who === 'you'
   return (
@@ -35,7 +44,7 @@ function Bubble({ who, children, sub }) {
         <div dir="auto" style={{
           background: mine ? '#1f5f8b' : '#eef3f1', color: mine ? '#fff' : '#1b1b1b',
           padding: '10px 12px', borderRadius: 12, whiteSpace: 'pre-wrap', lineHeight: 1.4,
-        }}>{children}</div>
+        }}><Linked text={children} /></div>
         {sub && <div style={{ fontSize: 12, color: '#6b6b6b', marginTop: 3, textAlign: mine ? 'right' : 'left' }}>{sub}</div>}
       </div>
     </div>
@@ -136,7 +145,7 @@ export default function Chat() {
               <Bubble who="you" sub={`ticket ${ref}`}>{m.text}</Bubble>
               {t.replies.map((r) => (
                 <Bubble key={r.draft_version} who="bot"
-                  sub={[t.team && `team ${t.team}`, t.route_reason].filter(Boolean).join(' · ')}>{r.body}</Bubble>
+                  sub={null}>{r.body}</Bubble>
               ))}
               {!t.replies.length && <Bubble who="bot"><i style={{ color: '#555' }}>{STATUS[t.status] || STATUS.running}</i></Bubble>}
               {!!t.replies.length && t.status === 'waiting_review' && <Bubble who="bot"><i>{STATUS.waiting_review}</i></Bubble>}

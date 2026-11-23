@@ -52,6 +52,9 @@ def build_chunks(kb_articles: list[dict], rules: list[dict], process_docs: dict[
             "superseded_by": None,
             "effective_from": None,
             "effective_to": None,
+            # the guide's page, when the export carries one (customers get the link with the answer)
+            "url": next((a[k] for k in ("url", "link", "confluence_url", "help_url")
+                         if str(a.get(k) or "").startswith("https://")), None),
         }
         chunks.append(
             {

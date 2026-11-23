@@ -36,8 +36,9 @@ def test_live_dashboard_counts_routes_rules_tiers_and_the_learning_loop():
     rules = {r["key"] for r in d["by_rule"]}
     assert {"R03a-smalltalk", "R11-howto", "R07-statutory", "R01-injection", "R03b-too-vague"} <= rules
     res = d["resolution"]
-    assert res["answered_automatically"] == 4 and res["waiting_for_review"] == 1
-    assert res["howto_tickets"] == 1 and res["howto_automation_rate"] == 1.0
+    # the How-To guide has a title but no written steps: a person answers it (not counted as automated)
+    assert res["answered_automatically"] == 3 and res["waiting_for_review"] == 2
+    assert res["howto_tickets"] == 1 and res["howto_automation_rate"] == 0.0
     assert res["knowledge_tasks_open"] == 1 and res["reviews"]["open"] == 1
     tiers = {t["key"] for t in res["answer_tiers"]}
     assert {"Template", "RAG (no model)"} <= tiers

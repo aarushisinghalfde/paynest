@@ -44,6 +44,7 @@ class Article:
     topic: str
     chunks: list[str]
     masked_counts: dict = field(default_factory=dict)
+    url: str | None = None  # the guide's page in the help centre, given to the customer with the steps
 
 
 def _strip_html(text: str) -> str:
@@ -94,6 +95,22 @@ def _scrub(text: str) -> tuple[str, dict]:
     return TOKEN_RE.sub(lambda t: f"[{t.group(1).lower().replace('_', ' ')} removed]", m.text), dict(m.counts)
 
 
+def guide_url(filename: str, url: str | None) -> str | None:
+    """An https link to the guide, on an allowed help-centre host (settings.HELP_DOMAINS) when that is set."""
+    if not url:
+        return None
+    from urllib.parse import urlparse
+
+    from shared import settings
+
+    u = urlparse(url.strip())
+    if u.scheme != "https" or not u.hostname or len(url) > 300 or any(c in url for c in " <>\"'"):
+        raise ValueError(f"{filename}: url must be a plain https link")
+    if settings.HELP_DOMAINS and u.hostname.lower() not in settings.HELP_DOMAINS:
+        raise ValueError(f"{filename}: url host {u.hostname} is not in HELP_DOMAINS")
+    return url.strip()
+
+
 def parse_article(filename: str, text: str) -> Article:
     if len(text) > MAX_BODY:
         raise ValueError(f"{filename}: larger than {MAX_BODY:,} characters")
@@ -119,6 +136,7 @@ def parse_article(filename: str, text: str) -> Article:
         body = body[:h.start()] + body[h.end():]
     region = (meta.get("region") or "ALL").upper()
     language = meta.get("language") or "en"
+    url = guide_url(filename, meta.get("url") or meta.get("link"))
     if region not in REGIONS:
         raise ValueError(f"{filename}: region must be IN, UAE or ALL")
     if language not in LANGUAGES:
@@ -131,7 +149,7 @@ def parse_article(filename: str, text: str) -> Article:
         raise ValueError(f"{filename}: no text after the front matter")
     return Article(kb_id=kb_id, title=m_title.strip()[:200], region=region, language=language,
                    topic=f"statutory:{statutory[0]}" if statutory else "howto", chunks=pieces,
-                   masked_counts=counts)
+                   masked_counts=counts, url=url)
 
 
 def parse_answers_csv(text: str) -> list[dict]:

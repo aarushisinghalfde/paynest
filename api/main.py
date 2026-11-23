@@ -145,7 +145,12 @@ def get_ticket(ticket_id: str) -> dict:
     from agent.unmask import customer_view
 
     ticket["replies"] = [{**r, "body": customer_view(r["body"])} for r in get_store().replies(ticket_id)]
-    return ticket
+    # The customer's view: no team, rule, reason, classification or decision record (those are internal)
+    return {k: ticket.get(k) for k in CUSTOMER_FIELDS if k in ticket}
+
+
+CUSTOMER_FIELDS = ("id", "ticket_id", "ticket_ref", "status", "agent_status", "route", "language", "created_at",
+                   "masked_body", "conversation_id", "feedback", "replies")
 
 
 # ---------------------------------------------------------------- reviewer console (minimal)

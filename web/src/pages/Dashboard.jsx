@@ -82,7 +82,7 @@ export default function Dashboard() {
       {!token && <p style={{ color: MUTED }}>Enter your lead or admin token to load the control room.</p>}
       {token && tab === 'overview' && <ConsoleOverview token={token} days={days} onPick={(v) => { setView(v); setTab('tickets') }} />}
       {token && tab === 'engineering' && role === 'admin' && <ConsoleEngineering token={token} days={days} />}
-      {token && tab === 'tickets' && <ConsoleTickets token={token} days={days} view={view} setView={setView} />}
+      {token && tab === 'tickets' && <ConsoleTickets token={token} days={days} view={view} setView={setView} role={role} />}
       {msg && <p style={{ color: 'crimson' }}>{msg}</p>}
       {!d && token && !msg && (tab === 'agent' || tab === 'export') && <p style={{ color: MUTED }}>Loading…</p>}
 

@@ -142,11 +142,11 @@ class PgAgentStore(PgTicketStore):
     def list_reviews(self, status="open"):
         with self._conn() as conn:
             rows = conn.execute("""SELECT r.id::text, r.ticket_id::text, r.draft, r.route_reason, r.created_at,
-                                          t.tenant_id, t.team, t.language, t.masked_body, r.kind
+                                          t.tenant_id, t.team, t.language, t.masked_body, r.kind, r.sources
                                    FROM review_tasks r JOIN tickets t ON t.id = r.ticket_id
                                    WHERE r.status = %s ORDER BY r.created_at""", (status,)).fetchall()
         keys = ("id", "ticket_id", "draft", "route_reason", "created_at", "tenant_id", "team", "language", "body",
-                "kind")
+                "kind", "kb_ids")
         return [dict(zip(keys, r, strict=True)) for r in rows]
 
     def decide_review(self, task_id, decision, body=None, reviewer=None):
@@ -282,14 +282,14 @@ class PgAgentStore(PgTicketStore):
                 """SELECT t.id::text, coalesce(t.ticket_ref, left(t.id::text, 8)), t.created_at, t.tenant_id,
                           tn.region, t.channel, t.language, t.team, t.route, t.route_rule, t.route_reason,
                           t.answer_tier, t.agent_status, t.classification, t.decision, t.translation, t.feedback,
-                          t.masked_body, t.conversation_id, t.pii_counts
+                          t.masked_body, t.conversation_id, t.pii_counts, tn.name, tn.tier
                    FROM tickets t LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id
                    WHERE t.id = %s AND t.origin = 'live'""", (ticket_id,)).fetchone()
             if row is None:
                 return None
             keys = ("id", "ref", "created_at", "tenant_id", "region", "channel", "language", "team", "route",
                     "route_rule", "route_reason", "answer_tier", "agent_status", "classification", "decision",
-                    "translation", "feedback", "masked_body", "conversation_id", "pii_counts")
+                    "translation", "feedback", "masked_body", "conversation_id", "pii_counts", "tenant_name", "tenant_tier")
             t = dict(zip(keys, row, strict=True))
             t["replies"] = [{"version": v, "body": b, "sent_at": a} for v, b, a in conn.execute(
                 """SELECT draft_version, body_masked, sent_at FROM sent_replies WHERE ticket_id = %s
@@ -325,6 +325,8 @@ class PgAgentStore(PgTicketStore):
                                     VALUES (%s, %s, 'kb_title', %s, %s, %s, %s, %s, current_date)""",
                                  (f"{a.kb_id}#title", a.kb_id, a.region, a.topic, a.language, a.title,
                                   f"{a.kb_id}: {a.title}"))
+                conn.execute("UPDATE kb_chunks SET url = %s WHERE kb_id = %s AND source_kind = 'kb_title'",
+                             (a.url, a.kb_id))
                 for i, text in enumerate(a.chunks, start=1):
                     conn.execute("""INSERT INTO kb_chunks (chunk_id, kb_id, source_kind, region, topic, language,
                                                            title, content, effective_from, last_reviewed)
@@ -404,7 +406,7 @@ class PgAgentStore(PgTicketStore):
                 """SELECT json_build_object('chunk_id', chunk_id, 'kb_id', kb_id, 'source_kind', source_kind,
                           'region', region, 'topic', topic, 'language', language, 'title', title,
                           'content', content, 'effective_from', effective_from, 'effective_to', effective_to,
-                          'superseded_by', superseded_by) FROM kb_chunks""").fetchall()]
+                          'superseded_by', superseded_by, 'url', url) FROM kb_chunks""").fetchall()]
             rules = [r[0] for r in conn.execute(
                 """SELECT json_build_object('rule_id', rule_id, 'region', region, 'topic', topic, 'title', title,
                           'effective_from', effective_from, 'old_value', old_value, 'new_value', new_value,
@@ -522,6 +524,8 @@ class MemoryAgentStore(MemoryTicketStore):
                                         "feedback", "masked_body", "conversation_id")},
                "id": ticket_id, "ref": t.get("ticket_ref") or ticket_id[:8],
                "region": (self.tenants.get(t["tenant_id"]) or {}).get("region"),
+               "tenant_name": (self.tenants.get(t["tenant_id"]) or {}).get("name"),
+               "tenant_tier": (self.tenants.get(t["tenant_id"]) or {}).get("tier"),
                "replies": [{"version": r["draft_version"], "body": r["body"]} for r in self.replies(ticket_id)],
                "cost_usd": 0.0,
                "reviews": [{"id": r["id"], "kind": r.get("kind"), "status": r["status"], "outcome": r.get("outcome"),
@@ -596,6 +600,9 @@ class MemoryAgentStore(MemoryTicketStore):
                 self.kb.append({"chunk_id": f"{a.kb_id}#title", "kb_id": a.kb_id, "source_kind": "kb_title",
                                 "region": a.region, "topic": a.topic, "title": a.title,
                                 "content": f"{a.kb_id}: {a.title}"})
+            for c in self.kb:
+                if c["chunk_id"] == f"{a.kb_id}#title":
+                    c["url"] = a.url
             self.kb += [{"chunk_id": f"{a.kb_id}#article{i}", "kb_id": a.kb_id, "source_kind": "kb_article",
                          "region": a.region, "topic": a.topic, "title": a.title, "content": t}
                         for i, t in enumerate(a.chunks, start=1)]

@@ -66,6 +66,18 @@ STATUS = {
 }
 
 
+# First How-To message with no written steps we can give: say so plainly and who answers. No guide names,
+# no counts, no "which part are you stuck on?".
+HOWTO_HANDOFF = {
+    "en": "I don't have written steps for this yet, so I've passed your question to our How-To team (ticket {ref}). "
+    "They'll reply here with the exact steps; you won't need to repeat anything.",
+    "hi-Latn": "Iske liye abhi likhe hue steps mere paas nahi hain, isliye maine aapka sawal hamari How-To team ko "
+    "bhej diya hai (ticket {ref}). Wo yahin exact steps ke saath jawab denge; aapko kuch dohraana nahi padega.",
+    "hi": "इसके लिए अभी लिखे हुए चरण मेरे पास नहीं हैं, इसलिए मैंने आपका सवाल हमारी टीम को भेज दिया है (टिकट {ref})। "
+    "टीम यहीं सटीक चरणों के साथ जवाब देगी; आपको कुछ दोहराना नहीं पड़ेगा।",
+    "ar": "لا تتوفر لدي خطوات مكتوبة لهذا بعد، لذا أحلت سؤالك إلى فريقنا (التذكرة {ref}). سيرد الفريق هنا بالخطوات "
+    "الدقيقة، ولن تحتاج إلى التكرار.",
+}
 HANDOFF = {
     "en": "Thanks, that helps. I've passed this to our How-To team together with our conversation, so you won't "
     "need to repeat anything. They'll reply here with the exact steps.",
@@ -79,5 +91,5 @@ HANDOFF = {
 
 def render(kind: str, language: str, **kw) -> str:
     table = {"ack": ACK, "incident": INCIDENT, "duplicate": DUPLICATE, "greeting": GREETING, "thanks": THANKS,
-             "clarify": CLARIFY, "status": STATUS, "handoff": HANDOFF}.get(kind, BLOCKED)
+             "clarify": CLARIFY, "status": STATUS, "handoff": HANDOFF, "howto_handoff": HOWTO_HANDOFF}.get(kind, BLOCKED)
     return table.get(language, table["en"]).format(**kw)

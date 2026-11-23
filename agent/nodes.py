@@ -43,6 +43,7 @@ class Deps:
     payroll_url: str | None = None  # payroll API for get_run_status
     draft_rung: int = 1
     answer_cache: object = None  # agent.answer_cache (How-To answers): checked before RAG
+    answer_at: float = 0.8  # confidence needed to SEND an agent-written answer without a person (models.yaml)
 
 
 def _step(state, name):
@@ -236,7 +237,7 @@ def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
         hit = answer_library.best(q, deps.store.howto_answers(region, lang))
         if hit:
             src = answer_library.as_source(hit)
-            return {"draft": f"{hit['answer']} [{src['chunk_id']}]", "draft_mode": "library",
+            return {"draft": f"{drafter.customer_steps(hit['answer'])} [{src['chunk_id']}]", "draft_mode": "library",
                     "citations": [src["chunk_id"]],
                     "sources": {"as_of": when, "hits": [src], "facts": [], "library_similarity": hit["similarity"]}}
     # 2. answers already given (Redis), keyed by KB version
@@ -260,7 +261,9 @@ def _howto(state, deps: Deps, q, region, lang, as_of, queued) -> dict:
     if d is None and facts:
         d = drafter.draft(state, [], facts, as_of, model=deps.model, rung=deps.draft_rung)
     if d is None:
-        return {"sources": sources, **_template(state, "ack")}
+        # no written steps we can give: a person answers; support writes the steps once (learning loop)
+        learn = [a["kb_id"] or a["chunk_id"].split("#")[0] for a in articles[:1]] or ["none"]
+        return {"sources": sources, **_template(state, "howto_handoff"), "learn_kb": learn, "handoff": True}
     # 5. no source had real steps: ask support to write the answer once (learning loop, in send)
     learn = [a["kb_id"] or a["chunk_id"].split("#")[0] for a in articles[:1] if not a.get("has_steps")]
     fb = drafter.draft_howto(state, articles, model=None) if d["mode"] == "model" else None
@@ -300,6 +303,8 @@ def _guard(state, draft):
         facts=src.get("facts"),
         as_of=retrieval._as_date(as_of) if as_of else None,
         ref=state.get("meta", {}).get("ticket_ref") or state["ticket_id"][:8],
+        # How-To answers the agent wrote must be specific steps (approved library answers were written by people)
+        howto=bool(state.get("howto")) and state.get("draft_mode") in ("model", "fallback", "cache"),
     )
 
 
@@ -325,6 +330,15 @@ def send(state, deps: Deps):
         deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common,
                                  decision=decision.record(state, "waiting_review"))
         return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
+    unsure = _unsure(state, deps)
+    if unsure and hasattr(deps.store, "create_review"):
+        # Routing a ticket to a team at 0.5 is cheap to undo; telling a customer an answer is not. An answer the
+        # agent wrote goes out on its own only when the classifiers agree and confidence is at least answer_at.
+        reason = unsure
+        deps.store.create_review(state["ticket_id"], state["draft_version"], state["draft"], reason)
+        deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **{**common, "route_reason": reason},
+                                 decision=decision.record(state, "waiting_review"))
+        return {"sent": False, "waiting_review": True, "steps": _step(state, "send")}
     tier = {"cache": "the How-To cache", "library": "approved How-To answers"}.get(state.get("draft_mode"))
     if tier:
         common["route_reason"] = f"{common.get('route_reason') or ''} (answered from {tier})".strip()
@@ -332,23 +346,53 @@ def send(state, deps: Deps):
     deps.store.save_progress(state["ticket_id"], agent_status="replied", **common,
                              decision=decision.record(state, "sent"))
     _cache_answer(state, deps)
-    _ask_support_to_write_it(state, deps)
+    wrote_task = _ask_support_to_write_it(state, deps)
+    if state.get("handoff") and hasattr(deps.store, "create_review"):
+        # The customer was told a person will reply with the steps. If this ticket opened the knowledge task,
+        # approving it answers them; otherwise (the task is another customer's) a person replies to this one.
+        if not wrote_task:
+            deps.store.create_review(state["ticket_id"], state["draft_version"] + 2, "",
+                                     "How-To with no written steps: write this customer's reply (the steps)")
+        deps.store.save_progress(state["ticket_id"], agent_status="waiting_review", **common,
+                                 decision=decision.record(state, "waiting_review"))
     return {"sent": True, "meta": {**state.get("meta", {}), "sent_now": sent_now}, "steps": _step(state, "send")}
+
+
+def _unsure(state, deps: Deps) -> str | None:
+    """Why an agent-written answer needs a person first, or None when it may go out on its own."""
+    if (state.get("route") != "reply" or not state.get("howto")
+            or state.get("draft_mode") not in ("model", "fallback", "cache")):
+        # acknowledgements, chat, approved library answers written by people, and run-status replies (the
+        # payroll API's own status for the run id the customer gave: true whichever team the ticket is in)
+        return None
+    c = state.get("classification") or {}
+    conf = float(c.get("confidence") or 0)
+    layers = [t for t in (c.get("layers") or {}).values() if t]
+    disagree = len(set(layers)) > 1
+    if conf >= deps.answer_at and not disagree:
+        return None
+    why = "the classifiers disagreed" if disagree else f"confidence {conf:.2f} is below {deps.answer_at:.2f}"
+    return f"answer ready, but {why}: a person approves it before the customer sees it"
 
 
 def _ask_support_to_write_it(state, deps: Deps):
     """Learning loop: the customer got a guide, not steps. Support writes the answer once; on approval the
     customer gets it and it joins the library for every future asker. One open task per question."""
     if not state.get("learn_kb") or not hasattr(deps.store, "create_review"):
-        return
+        return False
     q = _question(state)
     for t in deps.store.list_reviews():
-        if t.get("kind") == "knowledge" and answer_library.similarity(q, t.get("body") or "") >= 0.75:
-            return
+        if t.get("kind") != "knowledge" or t.get("status", "open") != "open":
+            continue
+        # one task per guide: once its steps are written, every question that guide answers is automatic
+        if set(t.get("kb_ids") or []) & set(state["learn_kb"]) - {"none"} \
+                or answer_library.similarity(q, t.get("body") or "") >= 0.75:
+            return False
     deps.store.create_review(
         state["ticket_id"], state["draft_version"] + 1, "",
         f"How-To knowledge: write the steps once (guide {state['learn_kb'][0]}); the customer gets them and every "
         f"similar question is answered automatically from then on", kind="knowledge", kb_ids=state["learn_kb"])
+    return True
 
 
 def _cache_answer(state, deps: Deps):

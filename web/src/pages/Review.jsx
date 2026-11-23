@@ -23,7 +23,12 @@ export default function Review() {
   async function load() {
     if (!token) return
     const r = await fetch('/api/review/tasks', { headers: { 'X-Admin-Token': token } })
-    if (!r.ok) { setMsg(`Cannot load tasks: HTTP ${r.status}`); return }
+    if (!r.ok) {
+      setMsg(r.status === 401
+        ? 'This token cannot review. Use the admin token or a named reviewer token (the support lead token is read-only: it opens the control room).'
+        : `Cannot load tasks: HTTP ${r.status}`)
+      return
+    }
     setMsg('')
     setTasks(await r.json())
   }

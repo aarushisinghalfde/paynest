@@ -132,7 +132,8 @@ def build_gate():
     deps = Deps(store, from_settings(settings), settings.PII_HMAC_KEY.encode(),
                 settings.VAULT_TTL_DAYS, classifier=classifier, retriever=retriever, answer_cache=answer_cache,
                 model=client if client.key else None, payroll_url=settings.PAYROLL_API_URL,
-                draft_rung=config().get("defaults", {}).get("draft", 1))
+                draft_rung=config().get("defaults", {}).get("draft", 1),
+                answer_at=float(config().get("defaults", {}).get("answer_auto_at", 0.8)))
     graph = agent_graph.build(deps, agent_graph.postgres_checkpointer(settings.DATABASE_URL))
     reload = knowledge_reloader(deps, store) if retriever is not None else (lambda: None)
 

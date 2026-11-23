@@ -10,12 +10,18 @@ from tests.test_drafting import CHUNKS, RULES
 
 PAYSLIP = {"chunk_id": "KB-0105#title", "kb_id": "KB-0105", "source_kind": "kb_title", "region": "ALL",
            "topic": "payslip", "title": "Downloading payslips in bulk", "content": "KB-0105: Downloading payslips in bulk"}
+# The imported article text (steps): How-To answers are only given from written steps.
+PAYSLIP_STEPS = {"chunk_id": "KB-0105#a1", "kb_id": "KB-0105", "source_kind": "kb_article", "region": "ALL",
+                 "topic": "payslip", "title": "Downloading payslips in bulk",
+                 "content": "1. Open Payroll > Payslips.\n2. Pick the payroll month.\n"
+                            "3. Select all employees and choose Download as ZIP."}
 TENANTS = {"C-1001": {"tenant_id": "C-1001", "region": "IN"}, "C-1003": {"tenant_id": "C-1003", "region": "UAE"}}
 
 
 def _setup():
     store = MemoryAgentStore(TENANTS)
-    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES))
+    # answer_at 0.5: these tests are about the record and the buckets; the 0.8 send gate has its own tests
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, PAYSLIP_STEPS], RULES), answer_at=0.5)
     return store, deps
 
 

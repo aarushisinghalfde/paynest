@@ -27,7 +27,7 @@ MAX_ENTRIES = 500
 WORDS_MIN, GRAMS_MIN = 0.6, 0.75
 # Bump when the How-To reply rules change, so answers written under the old rules are not served again.
 # 2: replies must name their guide in words (v0.7.1 cached "using [KB-0105#title] guide" -> "using guide").
-ANSWER_FORMAT = 2
+ANSWER_FORMAT = 3  # 3: no KB ids or "solved N" in replies; title-only deflections never cached
 
 
 def _jaccard(a: set, b: set) -> float:

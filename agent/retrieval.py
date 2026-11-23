@@ -204,5 +204,5 @@ def _opt(v):
 
 def _public(c: dict) -> dict:
     keys = ("chunk_id", "kb_id", "source_kind", "region", "topic", "title", "content", "effective_from",
-            "effective_to", "superseded_by")
+            "effective_to", "superseded_by", "url")
     return {k: c.get(k) for k in keys}

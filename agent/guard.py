@@ -29,6 +29,15 @@ UAE_TERMS = re.compile(r"\b(WPS|SIF|MOHRE|AED|dirham|Emirates ID|EDR|gratuity)\b
 LEAK_RE = re.compile(
     r"(system prompt|my instructions|i was told to|as an ai\b|language model|ignore (all |any )?(previous|prior)"
     r"|developer mode|jailbreak|here (is|are) (my|the) (rules|instructions))", re.I)
+# Internal detail the customer must never see: article/chunk ids, how often a guide "solved" questions,
+# scores, rule ids, confidence, caches and models.
+INTERNAL_RE = re.compile(
+    r"\bKB-\d+|\bR\d{2}[a-z]?-[a-z]|\bsolved \d+ (similar|past)|\bconfidence\b|\brelevance\b|\bsimilarity\b"
+    r"|\banswer cache\b|\b(language|AI) model\b|\bLLM\b|\bsystem prompt\b|\bclassifier\b|\btriage desk\b|\[[a-z ]+ removed\]",
+    re.IGNORECASE)
+# A How-To answer must be specific: at least two steps (numbered, bulleted or "go to ... > ...").
+STEP_RE = re.compile(r"(?m)^\s*(\d+[.)]|[-*\u2022])\s+\S|\b(go to|open|click|select|choose)\b.*>", re.IGNORECASE)
+URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 PROMISE_RE = re.compile(
     r"\b(guarantee[ds]?|100\s?%|definitely|certainly will|will be refunded|refund (will|is) (be )?(processed|issued)"
     r"|we promise|no later than|by tomorrow|within \d+ (hours|days))\b", re.I)
@@ -63,7 +72,7 @@ def pii_found(text: str) -> list[str]:
 
 
 def check(draft: str, *, ticket_text: str, region: str | None, language: str, hits: list[dict] | None = None,
-          facts: list[dict] | None = None, as_of: date | None = None, ref: str = "") -> dict:
+          facts: list[dict] | None = None, as_of: date | None = None, ref: str = "", howto: bool = False) -> dict:
     hits, facts = hits or [], facts or []
     problems: list[str] = []
     if not isinstance(draft, str) or not draft.strip():
@@ -93,7 +102,7 @@ def check(draft: str, *, ticket_text: str, region: str | None, language: str, hi
     body = TOKEN_RE.sub(" ", draft)
     if ref:
         body = body.replace(ref, " ")
-    body = CITE_RE.sub(" ", body)
+    body = URL_RE.sub(" ", CITE_RE.sub(" ", body))  # a link's digits are not claims
     numbers = [_norm_num(n) for n in NUMBER_RE.findall(body)]
     # A number the customer wrote ("PR-202609") is an echo, not a claim: it needs no citation. Live
     # check: "Payroll run PR-202609 is processing" without an inline [id] was parked as uncited.
@@ -120,6 +129,15 @@ def check(draft: str, *, ticket_text: str, region: str | None, language: str, hi
         problems.append("instruction_leak")
     if PROMISE_RE.search(draft):
         problems.append("promise")
+    links = [u.rstrip(".,;:!?") for u in URL_RE.findall(draft)]
+    known = {h.get("url") for h in hits if h.get("url")}
+    if any(u not in known for u in links):
+        problems.append("unknown_link")  # only the link of a guide the reply used; never a made-up one
+    if INTERNAL_RE.search(CITE_RE.sub(" ", TOKEN_RE.sub(" ", URL_RE.sub(" ", draft)))):
+        problems.append("internal_detail")
+    if (howto and len(STEP_RE.findall(draft)) < 2 and not (language != "en" and STEP_RE.search(draft))
+            and not (links and set(links) <= known)):  # a link to the guide's own page is specific too
+        problems.append("not_specific")
 
     want = {"hi": "hi", "ar": "ar"}.get(language, "latin")
     if _script(draft) != want:

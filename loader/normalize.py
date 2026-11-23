@@ -83,6 +83,10 @@ def case_status(raw: str | None) -> str | None:
 
 
 _HINGLISH = {
+    # live misses: "kaise download karun slip?", "kahan se khulegi ye guide?"
+    "karun", "karu", "karein", "karen", "kahan", "kahaan", "khulegi", "khulega", "khule", "milega", "milegi",
+    "mujhe", "hume", "humein", "aap", "aapka", "batao", "bataiye", "chahta", "chahti", "dekhna", "nikalna",
+    "kaun", "kidhar", "yeh", "ye", "woh", "se", "ko", "ki", "ke", "ka", "hoti", "hota", "sakta", "sakti",
     "hai",
     "nahi",
     "kya",
@@ -126,4 +130,6 @@ def language(text: str) -> str:
     if re.search(r"[؀-ۿ]", text):
         return "ar"
     words = set(re.findall(r"[a-z]+", text.lower()))
-    return "hi-Latn" if len(words & _HINGLISH) >= 2 else "en"
+    hits = words & _HINGLISH
+    # two Hinglish words, at least one not a short particle ("ki", "ka" are also names and initials)
+    return "hi-Latn" if len(hits) >= 2 and any(len(w) >= 4 for w in hits) else "en"

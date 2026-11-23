@@ -42,3 +42,7 @@ defaults:
   # trained on the earlier 80%): 0.6 -> 145/271 auto-routed at 99.3%; 0.5 -> 260/271 at 95.9%
   # overall, the same accuracy as today's triage outcome, with ~1/10 of the triage-desk load.
   classify_auto_at: 0.5
+  # Send an agent-written answer to the customer with no person only at this confidence AND when the
+  # classifier layers agree. 0.5 is fine for picking a team queue (a wrong queue is re-routed); it is
+  # not enough to answer a customer. Below this the answer waits for a person's approval.
+  answer_auto_at: 0.8

@@ -66,7 +66,8 @@ def test_long_articles_are_split_into_parts():
 
 def _ask(store, text, cid):
     chunks, _ = store.knowledge()
-    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, *chunks], RULES))
+    # answer_at 0.5: import is under test here; the 0.8 send gate has its own tests
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, *chunks], RULES), answer_at=0.5)
     tid = store.create("C-1001", "chat", text, None)
     store.save_progress(tid, conversation_id=cid, created_at=datetime.now(UTC))
     return tid, run(tid, deps, MemoryCheckpoints())
@@ -77,7 +78,8 @@ def test_after_import_the_agent_answers_with_the_steps_and_learns_nothing_new():
     store.import_articles([ki.parse_article("x.md", ARTICLE)])
     tid, st = _ask(store, "How do I download payslips for all employees?", "conv-k0000001")
     reply = customer_view(store.replies(tid)[0]["body"])
-    assert st["guard"]["ok"] and st["sent"] and "Download as ZIP" in reply and "KB-0105" in reply
+    assert st["guard"]["ok"] and st["sent"] and "Download as ZIP" in reply
+    assert "KB-0105" not in reply and "removed]" not in reply  # the steps; no ids, no masked contact lines
     assert not st.get("learn_kb") and not [t for t in store.list_reviews() if t["kind"] == "knowledge"]
 
 
@@ -97,7 +99,8 @@ def test_answers_csv_goes_into_the_library_masked():
     store = MemoryAgentStore(TENANTS)
     store.import_answers(rows)
     tid, st = _ask(store, "how can I reset a password for an employee", "conv-k0000003")
-    assert st["draft_mode"] == "library" and "click Reset" in store.replies(tid)[0]["body"]
+    body = store.replies(tid)[0]["body"]
+    assert st["draft_mode"] == "library" and "click Reset" in body and "removed]" not in body
     with pytest.raises(ValueError, match="line 2"):
         ki.parse_answers_csv("question,answer\nonly a question,\n")
 

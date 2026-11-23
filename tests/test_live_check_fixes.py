@@ -7,7 +7,7 @@ from agent.runner import MemoryCheckpoints, run
 from agent.store import MemoryAgentStore
 from agent.unmask import customer_view
 from intake.vault import MemoryVault
-from tests.test_drafting import CHUNKS, RULES
+from tests.test_drafting import CHUNKS, PAYSLIP_STEPS, RULES
 
 PAYSLIP = {"chunk_id": "KB-0105#title", "kb_id": "KB-0105", "source_kind": "kb_title", "region": "ALL",
            "topic": "payslip", "title": "Downloading payslips in bulk", "content": "KB-0105: Downloading payslips in bulk"}
@@ -40,12 +40,20 @@ def _chat(store, deps, tenant, text, cid):
 
 def test_model_reply_that_hides_the_guide_in_a_citation_still_names_it():
     # live: "You can download payslips in bulk using [KB-0105#title] guide." -> customer saw "using guide"
-    m = FakeModel({"reply": "You can download payslips in bulk using [KB-0105#title] guide. Which pay run?",
-                   "citations": ["KB-0105#title"], "answerable": False})
-    arts = Retriever([PAYSLIP], []).howto_articles("download payslips all employees", "IN", None)
+    m = FakeModel({"reply": "1. Open Payroll > Payslips using [KB-0105#a1] guide.\n2. Choose Download as ZIP.",
+                   "citations": ["KB-0105#a1"], "answerable": True})
+    arts = Retriever([PAYSLIP, PAYSLIP_STEPS], []).howto_articles("download payslips all employees", "IN", None)
     d = drafter.draft_howto({"ticket_id": "t" * 32, "body": "How do I download payslips?", "language": "en"}, arts, m)
     shown = customer_view(d["reply"])
-    assert "KB-0105" in shown and "Downloading payslips in bulk" in shown
+    assert "Downloading payslips in bulk" in shown and "KB-0105" not in shown  # named by title, no internal id
+
+
+def test_model_says_it_cannot_answer_from_a_title_alone_so_a_person_does():
+    m = FakeModel({"reply": "The guide covers it. Which part are you stuck on?", "citations": ["KB-0105#title"],
+                   "answerable": False})
+    arts = Retriever([PAYSLIP], []).howto_articles("download payslips all employees", "IN", None)
+    assert drafter.draft_howto({"ticket_id": "t" * 32, "body": "How do I download payslips?", "language": "en"},
+                               arts, m) is None
 
 
 def test_model_draft_that_fails_the_guard_is_replaced_by_the_fixed_wording_not_parked():
@@ -54,10 +62,11 @@ def test_model_draft_that_fails_the_guard_is_replaced_by_the_fixed_wording_not_p
     # Arabic question below GUIDE_MIN (the real data adds past questions in Arabic).
     bad = FakeModel({"reply": "Download them here [KB-9999#nope].", "citations": ["KB-9999#nope"], "answerable": True})
     store = MemoryAgentStore(TENANTS)
-    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES), model=bad)
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, PAYSLIP_STEPS], RULES), model=bad,
+                answer_at=0.5)  # the send gate has its own tests
     tid, st = _chat(store, deps, "C-1001", "How do I download payslips for all employees?", "conv-ar000001")
     assert st["sent"] and st["draft_mode"] == "fallback" and st["guard"]["replaced"]
-    assert "KB-0105" in customer_view(store.replies(tid)[0]["body"])
+    assert "Download as ZIP" in customer_view(store.replies(tid)[0]["body"])
 
 
 def test_run_status_question_is_payroll_when_the_classifier_is_unsure():

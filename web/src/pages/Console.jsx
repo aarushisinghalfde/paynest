@@ -320,7 +320,7 @@ const PAGE = 50
 
 // The queue is filtered, searched and sorted on the server and comes 50 at a time, so it stays fast
 // with thousands of tickets; the chips show counts for the whole window, not just the loaded page.
-export function ConsoleTickets({ token, days, view, setView }) {
+export function ConsoleTickets({ token, days, view, setView, role }) {
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('newest')
@@ -367,7 +367,7 @@ export function ConsoleTickets({ token, days, view, setView }) {
                   {t.priority && <b style={{ color: BAD }}>P1 </b>}{t.preview || '(empty)'}
                 </div>
                 <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                  {(t.created_at || '').slice(5, 16).replace('T', ' ')} · {t.language} · {t.team || 'no team'} · conf {t.confidence == null ? '–' : t.confidence.toFixed(2)}
+                  {(t.created_at || '').slice(5, 16).replace('T', ' ')} · {LANG[t.language] || t.language} · {t.team || 'no team'}{role === 'admin' ? ` · conf ${t.confidence == null ? '–' : t.confidence.toFixed(2)}` : ''}
                   {t.feedback && ` · customer: ${t.feedback === 'yes' ? 'solved' : 'not solved'}`}
                 </div>
               </div>
@@ -448,6 +448,36 @@ function ConfidenceMeter({ value }) {
   )
 }
 
+const LANG = { en: 'English', ar: 'Arabic', hi: 'Hindi', 'hi-Latn': 'Hinglish' }
+// Plain names for the safety checks, for the client. The check ids stay in the FDE detail.
+const CHECK = { empty: 'empty reply', too_long: 'too long', pii_leak: 'contained personal data', unknown_token: 'referred to data the customer did not give',
+  bad_citation: 'cited a source that was not used', ungrounded_number: 'a number not found in the source', uncited_answer: 'a figure without a source',
+  wrong_region: 'mixed India and UAE rules', superseded_source: 'used an out-of-date rule', instruction_leak: 'exposed internal instructions',
+  promise: 'promised something we cannot guarantee', wrong_language: 'not in the customer\'s language',
+  internal_detail: 'showed internal details (ids, scores)', not_specific: 'not specific: no clear steps' }
+const band = (x) => (x == null ? { label: 'not scored', color: MUTED } : x >= 0.8 ? { label: 'High', color: OK }
+  : x >= 0.5 ? { label: 'Medium', color: WARN_TEXT } : { label: 'Low', color: BAD })
+const sourceTitles = (a) => {
+  const src = a.sources || [], cites = a.citations || []
+  const used = src.filter((h, i) => cites.includes(h.id) || (!cites.length && i === 0))
+  return [...new Set(used.map((h) => h.title).filter(Boolean))]
+}
+function plainOutcome(t, d, task) {
+  const a = d.answer || {}, m = d.merge || {}
+  const by = { library: 'an answer our team approved', cache: 'an answer already given for the same question',
+    model: 'the guide', fallback: 'the guide' }[a.tier]
+  switch (t.bucket) {
+    case 'resolved': return `Answered by the agent from ${by || 'approved sources'}.`
+    case 'approved': return 'Answered after a person approved the agent\'s reply.'
+    case 'approval':
+      if (task && !task.final_draft) return 'No written steps existed yet: our team is writing the reply. The customer was told a person will answer.'
+      return 'The agent prepared an answer; a person approves it before the customer sees it.'
+    case 'merged': return m.incident_id ? `Part of an incident reported by ${m.incident_size} customers: they get one update.` : 'Same question as an earlier ticket: linked, not answered twice.'
+    case 'chat': return 'Conversation (greeting, thanks or a follow-up), nothing to resolve.'
+    default: return `With the ${t.team || 'support'} team.`
+  }
+}
+
 function Trail({ id, token, onChanged }) {
   const [t, msg, reload] = useApi(`/console/tickets/${id}`, token, [id])
   const [english, setEnglish] = useState(true)
@@ -489,7 +519,10 @@ function Trail({ id, token, onChanged }) {
     <article style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: '14px 18px', background: '#fff' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: MUTED }}>Ticket {t.ref} · {t.tenant_id} ({dcs.tier || '–'}, {t.region || '–'}) · {t.language} · {t.cost_usd ? `$${t.cost_usd.toFixed(5)}` : '$0'} model spend</div>
+          <div style={{ fontSize: 12, color: MUTED }}>
+            Ticket {t.ref}, {t.tenant_name || t.tenant_id} ({[t.tenant_tier || dcs.tier, t.region].filter(Boolean).join(', ') || t.tenant_id}), {LANG[t.language] || t.language}
+            {t.role === 'admin' && `, model spend ${t.cost_usd ? `$${t.cost_usd.toFixed(5)}` : '$0'}`}
+          </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '2px 10px', borderRadius: 12, fontSize: 12, color: INK, background: SURFACE }}>
             <span style={{ width: 10, height: 10, borderRadius: 5, background: BUCKET[t.bucket]?.color || MUTED }} />{BUCKET[t.bucket]?.label || t.bucket}
           </div>
@@ -505,6 +538,37 @@ function Trail({ id, token, onChanged }) {
         {english && tr.question && !tr.question.ok && tr.question.reason !== 'already English' && <div style={{ color: WARN_TEXT, fontSize: 12 }}>{tr.question.reason}</div>}
       </Section>
 
+      <Section title="What happened">
+        <div style={{ fontSize: 15 }}>{plainOutcome(t, dcs, task)}</div>
+        <div style={{ marginTop: 6, color: INK }}>
+          Category <b>{c.team || 'not decided'}</b>, confidence <b style={{ color: band(c.confidence).color }}>{band(c.confidence).label}</b>
+          {c.injection && <span style={{ color: BAD }}>. Looked like an attempt to manipulate the assistant: only a person handles it.</span>}
+          {c.priority_signal && <span style={{ color: WARN_TEXT }}>. Urgent: pay or a filing is at risk.</span>}
+        </div>
+        {sourceTitles(a).length > 0 && <div style={{ marginTop: 6 }}>Answer based on: {sourceTitles(a).map((x, i) => <span key={i}>{i ? ', ' : ''}\u201c{x}\u201d</span>)}{isStatutory && a.as_of ? `, rules in force on ${a.as_of}` : ''}</div>}
+        {g.ok !== undefined && (
+          <div style={{ marginTop: 6 }}>
+            <span style={{ color: g.ok === false ? BAD : OK, fontWeight: 700 }}>{g.ok === false ? '✕' : '✓'}</span>{' '}
+            {g.ok === false ? `Held back by our safety checks: ${(g.failed || []).map((k) => CHECK[k] || k.replaceAll('_', ' ')).join('; ')}` : 'Passed all safety checks before sending'}
+          </div>
+        )}
+        {isStatutory && (
+          <div style={{ marginTop: 8, padding: 8, background: SURFACE, borderRadius: 6 }}>
+            Same question on another date:{' '}
+            <input type="date" value={cmpDate} onChange={(e) => setCmpDate(e.target.value)} /> <button onClick={compare}>Compare</button>
+            {cmp?.error && <span style={{ color: BAD }}> {cmp.error}</span>}
+            {(cmp?.topics || []).map((x) => (
+              <div key={x.topic} style={{ fontSize: 12, marginTop: 4 }}>
+                {x.topic} ({x.region}): {x.asked_for.date || 'asked date'} → <b>{x.asked_for.value || '–'}</b>; {x.compared.date} → <b>{x.compared.value || 'no rule'}</b>
+                {x.differs ? <span style={{ color: WARN_TEXT }}>, the rule changed in between</span> : <span style={{ color: MUTED }}>, same rule</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {t.role === 'admin' && (
+        <Fold label="Engineering detail (FDE only)">
       <Section title="What the agent decided" right={totalMs ? `${Math.round(totalMs)} ms in total` : null}>
         <div><b>{c.team || 'No team'}</b> · confidence {c.confidence ?? '–'} ({c.branch || '–'}) · {c.decided_by || '–'}</div>
         <ConfidenceMeter value={c.confidence} />
@@ -562,22 +626,9 @@ function Trail({ id, token, onChanged }) {
         })()}
         {(a.facts || []).map((f, i) => <div key={i} style={{ fontSize: 12 }}>Fact · {f.tool} {f.source}: <b>{String(f.result ?? '–')}</b></div>)}
         {!!a.learn_kb?.length && <div style={{ color: WARN_TEXT, fontSize: 12 }}>Only a guide title existed, so support was asked to write the steps once ({a.learn_kb.join(', ')}).</div>}
-        {isStatutory && (
-          <div style={{ marginTop: 8, padding: 8, background: SURFACE, borderRadius: 6 }}>
-            Same question on another date:{' '}
-            <input type="date" value={cmpDate} onChange={(e) => setCmpDate(e.target.value)} /> <button onClick={compare}>Compare</button>
-            {cmp?.error && <span style={{ color: BAD }}> {cmp.error}</span>}
-            {(cmp?.topics || []).map((x) => (
-              <div key={x.topic} style={{ fontSize: 12, marginTop: 4 }}>
-                {x.topic} ({x.region}): {x.asked_for.date || 'asked date'} → <b>{x.asked_for.value || '–'}</b>; {x.compared.date} → <b>{x.compared.value || 'no rule'}</b>
-                {x.differs ? <span style={{ color: WARN_TEXT }}> · the rule changed in between</span> : <span style={{ color: MUTED }}> · same rule</span>}
-              </div>
-            ))}
-          </div>
-        )}
       </Section>
 
-      <Section title="12 checks on the draft" tone={g.ok === false ? BAD : OK}>
+      <Section title={`${(g.passed || []).length + (g.failed || []).length} checks on the draft`} tone={g.ok === false ? BAD : OK}>
         <div><span style={{ color: g.ok === false ? BAD : OK, fontWeight: 700 }}>{g.ok === false ? '✕' : '✓'}</span>{' '}
           {g.ok === false ? `Stopped by ${(g.failed || []).map((k) => k.replaceAll('_', ' ')).join(', ')}` : `All ${(g.passed || []).length} checks passed`}</div>
         {g.replaced_model_draft && <div style={{ fontSize: 12, marginTop: 4 }}>The model's draft failed ({g.replaced_model_draft.join(', ')}); the fixed wording from the same sources was used.</div>}
@@ -592,6 +643,9 @@ function Trail({ id, token, onChanged }) {
           </div>
         </Fold>
       </Section>
+
+        </Fold>
+      )}
 
       {task && (
         <Section title={canDecide ? 'Your decision' : 'Waiting for a reviewer'} tone={WARN} right={task.reason}>

@@ -247,18 +247,25 @@ def _chat(store, deps, text, cid="conv-1234"):
 
 PAYSLIP = {"chunk_id": "KB-0105#title", "kb_id": "KB-0105", "source_kind": "kb_title", "region": "ALL",
            "topic": "payslip", "title": "Downloading payslips in bulk", "content": "KB-0105: Downloading payslips in bulk"}
+PAYSLIP_STEPS = {"chunk_id": "KB-0105#a1", "kb_id": "KB-0105", "source_kind": "kb_article", "region": "ALL",
+                 "topic": "payslip", "title": "Downloading payslips in bulk",
+                 "content": "1. Open Payroll > Payslips.\n2. Pick the payroll month.\n"
+                            "3. Select all employees and choose Download as ZIP.\nQuestions? Write to [email removed]."}
 
 
 def test_howto_flow_answers_from_rag_then_from_the_cache():
     from agent.answer_cache import MemoryAnswerCache
 
     store, cache = MemoryAgentStore(TENANTS), MemoryAnswerCache()
-    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP], RULES), answer_cache=cache)
-    _, first = _chat(store, deps, "How do I download payslips for all employees?")
+    deps = Deps(store, MemoryVault(), b"k", retriever=Retriever([*CHUNKS, PAYSLIP, PAYSLIP_STEPS], RULES),
+                answer_cache=cache, answer_at=0.5)  # the send gate has its own tests
+    t1, first = _chat(store, deps, "How do I download payslips for all employees?")
     assert first["team"] == "How-To" and first["draft_mode"] == "fallback" and first["sent"]
+    body = customer_view(store.replies(t1)[0]["body"])
+    assert "Download as ZIP" in body and "KB-0105" not in body and "removed]" not in body  # steps, nothing internal
     t2, second = _chat(store, deps, "how can I download the payslips of all my employees", cid="conv-other")
     assert second["draft_mode"] == "cache" and second["guard"]["ok"] and second["sent"]
-    assert "KB-0105" in store.replies(t2)[0]["body"] and "How-To cache" in store.tickets[t2]["route_reason"]
+    assert "Download as ZIP" in store.replies(t2)[0]["body"] and "How-To cache" in store.tickets[t2]["route_reason"]
     _, other = _chat(store, deps, "How do I add a new employee?", cid="conv-3")
     assert other["draft_mode"] != "cache"  # a different question is not served from the cache
 
@@ -375,8 +382,13 @@ def test_learning_loop_support_writes_once_then_every_similar_question_gets_the_
     store = MemoryAgentStore(TENANTS)
     deps = _howto_deps(store)
     t1, first = _chat(store, deps, "How do I download payslips for all employees?", cid="conv-a1b2c3d4")
-    assert first["draft_mode"] == "fallback" and "KB-0105" in store.replies(t1)[0]["body"]
+    # only a title, no steps: told plainly that a person will reply with them; no guide name, no counts
+    first_reply = store.replies(t1)[0]["body"]
+    assert first["draft_mode"] == "template" and "passed your question to our How-To team" in first_reply
+    assert "KB-0105" not in first_reply and "solved" not in first_reply
+    assert store.tickets[t1]["agent_status"] == "waiting_review"
     task = next(t for t in store.list_reviews() if t["kind"] == "knowledge")
+    assert not [t for t in store.list_reviews() if t["kind"] == "reply"]  # approving the knowledge task answers them
     with pytest.raises(ValueError):
         store.decide_review(task["id"], "approve", "")  # an answer must be written
     steps = "Go to Payroll > Payslips, pick the month, select all employees and choose Download as ZIP."
@@ -397,10 +409,13 @@ def test_one_knowledge_task_per_question_not_one_per_customer():
     assert len([t for t in store.list_reviews() if t["kind"] == "knowledge"]) == 1
 
 
-def test_stuck_after_the_guide_hands_over_to_a_teammate_with_the_conversation():
+def test_no_written_steps_goes_to_a_person_at_once_and_a_second_asker_gets_their_own_reply_task():
     store = MemoryAgentStore(TENANTS)
     deps = _howto_deps(store)
-    _chat(store, deps, "How do I download payslips for all employees?", cid="conv-33333333")
-    t2, st = _chat(store, deps, "I can't find the bulk download option anywhere", cid="conv-33333333")
-    assert st["context_team"] == "How-To" and st["team"] == "How-To"
-    assert "passed this to our How-To team" in store.replies(t2)[0]["body"]
+    t1, _ = _chat(store, deps, "How do I download payslips for all employees?", cid="conv-33333333")
+    t2, _ = _chat(store, deps, "how can I download the payslips of all my employees", cid="conv-44444444")
+    for t in (t1, t2):
+        assert "passed your question to our How-To team" in store.replies(t)[0]["body"]
+        assert store.tickets[t]["agent_status"] == "waiting_review"
+    kinds = sorted((t["ticket_id"] == t2, t["kind"]) for t in store.list_reviews())
+    assert kinds == [(False, "knowledge"), (True, "reply")]  # one knowledge task; the second customer still gets a person

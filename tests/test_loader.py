@@ -255,8 +255,9 @@ def _migration_columns() -> dict[str, set[str]]:
             for ln in m.group(2).splitlines()
             if ln.strip() and not ln.strip().startswith(("--", "PRIMARY", "UNIQUE"))
         }
-    for m in re.finditer(r"ADD COLUMN IF NOT EXISTS (\w+)", sql):
-        cols["tickets"].add(m.group(1))
+    for m in re.finditer(r"ALTER TABLE (\w+)(.*?);", sql, re.S):  # each ALTER adds to its own table
+        for c in re.findall(r"ADD COLUMN IF NOT EXISTS (\w+)", m.group(2)):
+            cols.setdefault(m.group(1), set()).add(c)
     return cols
 
 

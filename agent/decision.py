@@ -10,7 +10,7 @@ from shared.tracing import current_trace_id
 
 GUARD_CHECKS = ("empty", "too_long", "pii_leak", "unknown_token", "bad_citation", "ungrounded_number",
                 "uncited_answer", "wrong_region", "superseded_source", "instruction_leak", "promise",
-                "wrong_language")
+                "wrong_language", "internal_detail", "not_specific", "unknown_link")
 
 
 
