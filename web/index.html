@@ -9,7 +9,19 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
     <style>
       body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #13233A; font-variant-numeric: tabular-nums; }
-      button, input, select, textarea { font-family: inherit; }
+      button, input, select, textarea { font-family: inherit; font-size: 14px; }
+      button { background: #fff; color: #13233A; border: 1px solid #c9d3de; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+      button:hover:not(:disabled) { border-color: #13233A; }
+      button:disabled { opacity: .5; cursor: default; }
+      button.primary { background: #13233A; color: #fff; border-color: #13233A; }
+      button.small { font-size: 12px; padding: 3px 9px; }
+      input:not([type=checkbox]):not([type=file]), select, textarea { border: 1px solid #c9d3de; border-radius: 6px; padding: 6px 8px; color: #13233A; background: #fff; box-sizing: border-box; }
+      .on-night input:not([type=checkbox]), .on-night select { background: #1d3150; color: #fff; border-color: #3a5070; }
+      .on-night label { color: #b9c6d6; font-size: 13px; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; }
+      th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid #e3e8ee; }
+      th { color: #5f6f73; font-weight: 500; }
+      a { color: #2a78d6; }
       :focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
       @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
     </style>

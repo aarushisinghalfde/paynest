@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ConsoleEngineering, ConsoleOverview, ConsoleTickets, Drawers, INK, MUTED, NIGHT, Panel, StatStrip, SURFACE, Tile, Bars, Table, pct } from './Console.jsx'
+import { Page } from '../theme.jsx'
+import { ConsoleEngineering, ConsoleOverview, ConsoleTickets, Drawers, MUTED, Panel, StatStrip, Tile, Bars, Table, pct } from './Console.jsx'
 
 // Support-head console + operations dashboard (lead or admin token), masked data only.
 //   Overview   what the agent resolved itself, what went to a person, trust signals, answer path
@@ -48,37 +49,30 @@ export default function Dashboard() {
 
   const TABS = [['overview', 'Overview'], ['tickets', 'Tickets'], ['agent', 'Agent analytics'], ['export', 'Q3 history'],
     ...(role === 'admin' ? [['engineering', 'Engineering']] : [])]
+  const flush = (tab === 'overview' || tab === 'engineering') && !!token
   return (
-    <div style={{ background: SURFACE, minHeight: '100vh' }}>
-    <main style={{ padding: '0 24px 32px', maxWidth: 1320, margin: '0 auto', color: INK }}>
-      <header style={{ background: NIGHT, color: '#fff', borderRadius: (tab === 'overview' || tab === 'engineering') && token ? 0 : '0 0 10px 10px', padding: '18px 20px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, fontFamily: "'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif" }}>Support control room</h1>
-            <p style={{ color: '#b9c6d6', margin: '4px 0 0', fontSize: 14 }}>{role === 'admin'
-              ? 'Engineer view: the support picture plus step timings, failures, model calls and traces. Masked data only.'
-              : 'What the agent did with each ticket, and why. Masked data only.'}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {tab !== 'export' && (
-              <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Time window"
-                style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #3a5070', background: '#1d3150', color: '#fff' }}>
-                {[1, 7, 30, 90].map((n) => <option key={n} value={n}>Last {n} day{n > 1 ? 's' : ''}</option>)}
-              </select>
-            )}
-            <input type="password" placeholder="Lead or admin token" aria-label="Lead or admin token" value={token} onChange={(e) => setToken(e.target.value)}
-              style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #3a5070', background: '#1d3150', color: '#fff', width: 190 }} />
-          </div>
-        </div>
+    <Page flush={flush} title="Support control room"
+      subtitle={role === 'admin'
+        ? 'Engineer view: the support picture plus step timings, failures, model calls and traces. Masked data only.'
+        : 'What the agent did with each ticket, and why. Masked data only.'}
+      controls={<>
+        {tab !== 'export' && (
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Time window">
+            {[1, 7, 30, 90].map((n) => <option key={n} value={n}>Last {n} day{n > 1 ? 's' : ''}</option>)}
+          </select>
+        )}
+        <input type="password" placeholder="Lead or admin token" aria-label="Lead or admin token" value={token}
+          onChange={(e) => setToken(e.target.value)} style={{ width: 190 }} />
+      </>}
+      tabs={
         <nav role="tablist" style={{ display: 'flex', gap: 22, marginTop: 14 }}>
           {TABS.map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              style={{ padding: '8px 0 10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14,
+              style={{ padding: '8px 0 10px', border: 'none', borderRadius: 0, background: 'none', fontSize: 14,
                 color: tab === k ? '#fff' : '#b9c6d6', borderBottom: `3px solid ${tab === k ? '#3987e5' : 'transparent'}` }}>{label}</button>
           ))}
         </nav>
-      </header>
-      <div style={{ height: (tab === 'overview' || tab === 'engineering') && token ? 0 : 18 }} />
+      }>
       {!token && <p style={{ color: MUTED }}>Enter your lead or admin token to load the control room.</p>}
       {token && tab === 'overview' && <ConsoleOverview token={token} days={days} onPick={(v) => { setView(v); setTab('tickets') }} />}
       {token && tab === 'engineering' && role === 'admin' && <ConsoleEngineering token={token} days={days} />}
@@ -150,7 +144,6 @@ export default function Dashboard() {
           </Drawers>
         </>
       )}
-    </main>
-    </div>
+    </Page>
   )
 }

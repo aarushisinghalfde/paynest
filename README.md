@@ -73,7 +73,7 @@ git tag vX.Y.Z; git push origin vX.Y.Z
 aws ssm send-command --profile payce-fde --region ap-southeast-2 --instance-ids <id from .\scripts\demo.ps1 status> --document-name AWS-RunShellScript --parameters "commands=['systemctl restart paynest']"
 # Load the case data (phase 4) and run the gates
 $env:AWS_PROFILE = "payce-fde"; python scripts\run_phase4.py
-python scripts\check_phase3.py; python scripts\check_phase4.py; python scripts\check_phase5.py
+.\scripts\run_checks.ps1      # every live gate and the evals, into checks_<time>.log
 # Infra changes: always plan, review, then apply
 .\scripts\cfn.ps1 plan <stack>; .\scripts\cfn.ps1 apply <stack>
 # Stop the demo when idle
@@ -105,13 +105,14 @@ python scripts\check_phase3.py; python scripts\check_phase4.py; python scripts\c
 | `infra/` | `local/elasticmq.conf` (optional local queue); `cfn/` CloudFormation templates from phase 2 | 1–2 |
 | `docs/` | `architecture.md`: what is built, diagrams, decisions | 2+ |
 | `.github/workflows/` | `CI.yml` (ruff, pytest, web build, cfn-lint on every push); `images.yml` (release images, version tags only) | 1–2 |
-| `scripts/phase0/` | AWS account and day-1 checks | 0 |
 | `scripts/create_dev_queues.py` | Creates the dev SQS queues in Sydney | 1 |
 | `scripts/migrate.py` | Applies `db/migrations/*.sql`, each once | 1 |
-| `scripts/check_phase1.py` | Phase 1 gate | 1 |
+| `scripts/check_phase1.py` | Local smoke test: a ticket goes through the local stack | 1 |
+| `scripts/precheck.ps1`, `deploy.ps1`, `run_checks.ps1` | CI checks before a push; release; every live gate | D |
 | `scripts/cfn.ps1` | Validate, plan (change set), apply, output, delete a CloudFormation stack | 2 |
 | `scripts/put_secrets.ps1` | Copies secrets from `.env` into SSM Parameter Store (encrypted) | 2 |
-| `data/`, `evals/` | Case data (raw is git-ignored) and evaluation sets | 3+ |
+| `data/` | Case data (git-ignored; the README says why) | 3+ |
+| `evals/` | Evaluation sets and how to run every eval; the labelled set itself is git-ignored | 3+ |
 
 ## Run it yourself (reviewers)
 

@@ -518,7 +518,7 @@ Deploy order: `network`, `security`, `data`, `iam`, `rds`, `vault`, `observabili
 
 | Phase 3 task | Command |
 | --- | --- |
-| Gate check | `python scripts\check_phase3.py` |
+| Gate check | covered by `.\scripts\run_checks.ps1` (the phase 3 gate script was retired once it passed) |
 | PII evaluation | `python scripts\eval_pii.py` (add `--record` to log to gates.csv) |
 | Reveal one value (audited) | `aws lambda invoke --function-name paynest-demo-vault-reveal --cli-binary-format raw-in-base64-out --payload file://reveal.json out.json` |
 

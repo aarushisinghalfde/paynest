@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BAD, Card, INK, MUTED, Note, Page, SURFACE, WARN_TEXT } from '../theme.jsx'
 
 // Reviewer console. Two kinds of task:
 //  - reply: a draft the router sent to review (statutory, P1, known issue, failed guard). Approve sends
@@ -51,57 +52,58 @@ export default function Review() {
     return () => clearInterval(t)
   }, [token])
 
+  const ok = msg.startsWith('Approved') || msg.startsWith('Saved') || msg.startsWith('Rejected')
   return (
-    <main style={{ fontFamily: 'inherit', padding: 24, maxWidth: 900 }}>
-      <h1>Reviewer console</h1>
-      <label>Reviewer or admin token <input type="password" value={token} onChange={(e) => setToken(e.target.value)} /></label>
-      {msg && <p>{msg}</p>}
-      {!tasks.length && token && <p style={{ color: '#777' }}>No tickets waiting for review.</p>}
+    <Page title="Review" subtitle="Answers waiting for a person: approve, edit or take over. Knowledge tasks: write the steps once and every similar question is answered automatically."
+      controls={<input type="password" placeholder="Reviewer or admin token" aria-label="Reviewer or admin token" value={token}
+        onChange={(e) => setToken(e.target.value)} style={{ width: 210 }} />}>
+      <Note tone={ok ? 'ok' : 'bad'}>{msg}</Note>
+      {!token && <Note>Enter a reviewer or admin token to see the tickets waiting for you.</Note>}
+      {!tasks.length && token && !msg && <Card><span style={{ color: MUTED }}>Nothing is waiting for review.</span></Card>}
       {tasks.map((t) => (
-        <div key={t.id} style={{ border: '1px solid #ccc', borderRadius: 8, padding: 12, margin: '12px 0' }}>
-          <div style={{ fontSize: 13, color: '#555' }}>
-            Ticket {t.ticket_id.slice(0, 8)} · tenant {t.tenant_id} · team {t.team || '?'} · {t.language}
+        <Card key={t.id} style={{ borderLeft: `3px solid ${t.kind === 'knowledge' ? '#1baf7a' : '#eda100'}` }}>
+          <div style={{ fontSize: 13, color: MUTED }}>
+            Ticket {t.ticket_id.slice(0, 8)}, {t.tenant_id}, {t.team || 'no team'}, {LANG[t.language] || t.language}
+            {t.kind === 'knowledge' && <b style={{ color: INK }}>. Knowledge task: write the steps once</b>}
           </div>
-          {t.kind === 'knowledge' && (
-            <div style={{ display: 'inline-block', background: '#e7f3ef', color: '#0e5e5d', borderRadius: 12,
-              padding: '2px 10px', fontSize: 12, margin: '6px 0' }}>Knowledge: write the answer once, reused automatically</div>
-          )}
-          <div style={{ fontSize: 13, color: '#8a5a00' }}>Why here: {t.route_reason}</div>
-          <p dir="auto"><b>Customer (masked):</b> {t.body}</p>
-          <button style={{ fontSize: 12 }} onClick={() => explain(t.ticket_id)}>
-            {t.language && t.language !== 'en' ? 'English + why' : 'Why'}
+          <div style={{ fontSize: 13, color: WARN_TEXT, marginTop: 4 }}>Why it is here: {t.route_reason}</div>
+          <p dir="auto" style={{ fontSize: 15 }}>{t.body}</p>
+          <button className="small" onClick={() => explain(t.ticket_id)}>
+            {t.language && t.language !== 'en' ? 'Show English and why' : 'Show why'}
           </button>
           <Why d={why[t.ticket_id]} />
-          <textarea rows={t.kind === 'knowledge' ? 6 : 4} style={{ width: '100%' }} value={edits[t.id] ?? t.draft}
-            placeholder={t.kind === 'knowledge' ? 'Write the exact steps the customer should follow (no personal data)…' : ''}
+          <textarea rows={t.kind === 'knowledge' ? 6 : 4} style={{ width: '100%', marginTop: 8 }} value={edits[t.id] ?? t.draft} dir="auto"
+            placeholder={t.kind === 'knowledge' ? 'Write the exact steps the customer should follow (no personal data)' : ''}
             onChange={(e) => setEdits({ ...edits, [t.id]: e.target.value })} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={() => decide(t, 'approve')}
+            <button className="primary" onClick={() => decide(t, 'approve')}
               disabled={t.kind === 'knowledge' && !(edits[t.id] || '').trim()}>
               {t.kind === 'knowledge' ? 'Save answer and send' : 'Approve and send'}
             </button>
             <button onClick={() => decide(t, 'reject')}>{t.kind === 'knowledge' ? 'Not needed' : 'Reject and take over'}</button>
           </div>
-        </div>
+        </Card>
       ))}
-    </main>
+    </Page>
   )
 }
 
+const LANG = { en: 'English', ar: 'Arabic', hi: 'Hindi', 'hi-Latn': 'Hinglish' }
+
 function Why({ d }) {
   if (!d) return null
-  if (typeof d === 'string') return <p style={{ fontSize: 13, color: '#777' }}>{d === 'loading' ? 'Loading…' : d}</p>
+  if (typeof d === 'string') return <p style={{ fontSize: 13, color: MUTED }}>{d === 'loading' ? 'Loading…' : d}</p>
   const c = d.decision?.classification || {}
   const a = d.decision?.answer || {}
   const q = d.translation?.question
   return (
-    <div style={{ background: '#f4f8f7', borderRadius: 6, padding: 8, margin: '6px 0', fontSize: 13 }}>
+    <div style={{ background: SURFACE, borderRadius: 6, padding: 8, margin: '6px 0', fontSize: 13 }}>
       {q?.ok && <div><b>English (machine translation):</b> {q.english}</div>}
-      {q && !q.ok && q.reason !== 'already English' && <div style={{ color: '#a15c00' }}>{q.reason}</div>}
-      <div>Team {c.team || '–'} · confidence {c.confidence ?? '–'} · {c.decided_by || '–'} · rule {d.decision?.route?.rule || d.route_rule}</div>
-      {!!a.sources?.length && <div>Sources: {a.sources.slice(0, 3).map((h) => `${h.title || h.id} (${h.score})`).join('; ')}</div>}
+      {q && !q.ok && q.reason !== 'already English' && <div style={{ color: WARN_TEXT }}>{q.reason}</div>}
+      <div>Category {c.team || '–'}, confidence {c.confidence ?? '–'}, rule {d.decision?.route?.rule || d.route_rule}</div>
+      {!!a.sources?.length && <div>Sources: {a.sources.slice(0, 3).map((h) => h.title || h.id).join('; ')}</div>}
       {!!a.facts?.length && <div>Facts: {a.facts.map((f) => `${f.tool} = ${f.result}`).join('; ')}</div>}
-      {d.decision?.guard && !d.decision.guard.ok && <div style={{ color: '#b42318' }}>Checks failed: {d.decision.guard.failed.join(', ')}</div>}
+      {d.decision?.guard && !d.decision.guard.ok && <div style={{ color: BAD }}>Checks failed: {d.decision.guard.failed.join(', ')}</div>}
     </div>
   )
 }

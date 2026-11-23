@@ -7,20 +7,12 @@ import { useEffect, useState } from 'react'
 //   Tickets    a workbench: queue (search, outcome chips, sorts) beside a decision trail for the
 //              selected ticket, with English for Arabic/Hindi, the sources behind each citation,
 //              "same question on another date" for statutory rules, and approve/edit/reject in place.
-export const INK = '#13233A'
-export const MUTED = '#5f6f73'
+import { BAD, CONDENSED, INK, LINE, MUTED, NIGHT, OK, SURFACE, WARN, WARN_TEXT } from '../theme.jsx'
+
+export { INK, MUTED, NIGHT, SURFACE }  // the dashboard imports these from here
 // UI chrome (buttons, active tabs) stays ink so it never reads as a data colour
-export const BAR = '#13233A'
+export const BAR = INK
 const SERIES = '#2a78d6'  // single-series bars: categorical slot 1
-export const SURFACE = '#EEF2F5'
-export const NIGHT = '#13233A'  // the control-room band
-const CONDENSED = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
-const LINE = '#e3e8ee'
-// status colours (reserved; always with an icon or a word, never colour alone)
-const OK = '#0ca30c'
-const WARN = '#fab219'
-const BAD = '#d03b3b'
-const WARN_TEXT = '#8a5a00'  // readable text tone for warnings on white
 // One hue per outcome in a fixed order, validated for colour-blind separation between neighbours
 // (dataviz validator: worst adjacent CVD dE 9.1, normal-vision 22.9). "Conversation only" is neutral
 // grey: it is not support work. Labels and counts always sit next to the colour.
@@ -337,7 +329,7 @@ export function ConsoleTickets({ token, days, view, setView, role }) {
     <>
       <Simulate onDone={reload} />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-        <aside style={{ border: `1px solid ${LINE}`, borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
+        <aside style={{ borderRadius: 6, background: '#fff', overflow: 'hidden' }}>
           <div style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
             <input placeholder="Search question, ticket, team, tenant…" value={q} onChange={(e) => setQ(e.target.value)}
               style={{ width: '100%', padding: 6, boxSizing: 'border-box' }} />
@@ -516,7 +508,7 @@ function Trail({ id, token, onChanged }) {
   }
 
   return (
-    <article style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: '14px 18px', background: '#fff' }}>
+    <article style={{ borderRadius: 6, padding: '16px 18px', background: '#fff' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 12, color: MUTED }}>

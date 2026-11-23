@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import ApiStatus from '../ApiStatus.jsx'
+import { ACCENT, Card, INK, MUTED, Note, Page, SURFACE } from '../theme.jsx'
 
 // Customer chat. Each message is posted once with its own Idempotency-Key (a double click or
 // a network retry cannot create two tickets), then the page polls the ticket every 2 s until
@@ -32,7 +32,7 @@ function Linked({ text }) {
   if (typeof text !== 'string') return text
   return text.split(/(https:\/\/[^\s<>"')\]]+)/g).map((part, i) => (
     /^https:\/\//.test(part)
-      ? <a key={i} href={part.replace(/[.,;:!?]+$/, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#1f5f8b' }}>{part}</a>
+      ? <a key={i} href={part.replace(/[.,;:!?]+$/, '')} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>{part}</a>
       : part))
 }
 
@@ -42,10 +42,10 @@ function Bubble({ who, children, sub }) {
     <div style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', margin: '8px 0' }}>
       <div style={{ maxWidth: '78%' }}>
         <div dir="auto" style={{
-          background: mine ? '#1f5f8b' : '#eef3f1', color: mine ? '#fff' : '#1b1b1b',
+          background: mine ? INK : SURFACE, color: mine ? '#fff' : INK,
           padding: '10px 12px', borderRadius: 12, whiteSpace: 'pre-wrap', lineHeight: 1.4,
         }}><Linked text={children} /></div>
-        {sub && <div style={{ fontSize: 12, color: '#6b6b6b', marginTop: 3, textAlign: mine ? 'right' : 'left' }}>{sub}</div>}
+        {sub && <div style={{ fontSize: 12, color: MUTED, marginTop: 3, textAlign: mine ? 'right' : 'left' }}>{sub}</div>}
       </div>
     </div>
   )
@@ -123,19 +123,11 @@ export default function Chat() {
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tickets])
 
   return (
-    <main style={{ fontFamily: 'inherit', padding: 24, maxWidth: 760, margin: '0 auto' }}>
-      <h1 style={{ marginBottom: 4 }}>Payce Support</h1>
-      <p style={{ color: '#555', marginTop: 0 }}>
-        Ask a payroll question. Answers come from approved Payce sources; statutory answers are checked by a specialist first.
-      </p>
-      <label style={{ fontSize: 14 }}>
-        Company (tenant id){' '}
-        <input value={tenant} onChange={(e) => setTenant(e.target.value)} style={{ width: 110 }} />
-        <span style={{ color: '#777' }}> e.g. C-1001 (India) · pick a UAE tenant for WPS questions</span>
-      </label>
-
-      <div style={{ border: '1px solid #d7dcdb', borderRadius: 12, padding: 14, margin: '12px 0', minHeight: 320,
-        maxHeight: '60vh', overflowY: 'auto', background: '#fbfcfc' }}>
+    <Page narrow={760} title="Customer chat"
+      subtitle="What a customer sees. Answers come from approved Payce sources; statutory answers are checked by a specialist first."
+      controls={<label>Company <input value={tenant} onChange={(e) => setTenant(e.target.value)} aria-label="Company (tenant id)"
+        style={{ width: 100 }} title="C-1001 is India; pick a UAE tenant for WPS questions" /></label>}>
+      <Card style={{ minHeight: 320, maxHeight: '60vh', overflowY: 'auto' }}>
         <Bubble who="bot">Hi! I can help with payroll, statutory rules (PF, TDS, WPS, gratuity), payslips and payroll runs.</Bubble>
         {messages.map((m) => {
           const t = tickets[m.ticketId] || { status: 'received', replies: [] }
@@ -147,14 +139,14 @@ export default function Chat() {
                 <Bubble key={r.draft_version} who="bot"
                   sub={null}>{r.body}</Bubble>
               ))}
-              {!t.replies.length && <Bubble who="bot"><i style={{ color: '#555' }}>{STATUS[t.status] || STATUS.running}</i></Bubble>}
+              {!t.replies.length && <Bubble who="bot"><i style={{ color: MUTED }}>{STATUS[t.status] || STATUS.running}</i></Bubble>}
               {!!t.replies.length && t.status === 'waiting_review' && <Bubble who="bot"><i>{STATUS.waiting_review}</i></Bubble>}
               {!!t.replies.length && t.status === 'replied' && t.route === 'reply' && (
-                <div style={{ fontSize: 13, color: '#555', margin: '2px 0 10px' }}>
+                <div style={{ fontSize: 13, color: MUTED, margin: '2px 0 10px' }}>
                   {feedback[m.ticketId] ? 'Thanks, noted.' : (
                     <>Did this solve it?{' '}
-                      <button onClick={() => sendFeedback(m.ticketId, true)} style={{ fontSize: 12 }}>Yes</button>{' '}
-                      <button onClick={() => sendFeedback(m.ticketId, false)} style={{ fontSize: 12 }}>No</button></>
+                      <button className="small" onClick={() => sendFeedback(m.ticketId, true)}>Yes</button>{' '}
+                      <button className="small" onClick={() => sendFeedback(m.ticketId, false)}>No</button></>
                   )}
                 </div>
               )}
@@ -162,21 +154,19 @@ export default function Chat() {
           )
         })}
         <div ref={bottom} />
-      </div>
+      </Card>
 
       <form onSubmit={send} style={{ display: 'flex', gap: 8 }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your message"
-          style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #c8cfcd' }} />
-        <button type="submit" style={{ padding: '10px 18px' }}>Send</button>
+          aria-label="Your message" style={{ flex: 1, padding: 10 }} />
+        <button type="submit" className="primary" style={{ padding: '10px 18px' }}>Send</button>
       </form>
       <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {EXAMPLES.map((q) => (
-          <button key={q} onClick={(e) => send(e, q)} style={{ fontSize: 13, borderRadius: 16, padding: '4px 10px',
-            border: '1px solid #c8cfcd', background: '#fff', cursor: 'pointer' }}>{q}</button>
+          <button key={q} onClick={(e) => send(e, q)} style={{ fontSize: 13, borderRadius: 16, padding: '4px 10px' }}>{q}</button>
         ))}
       </div>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      <ApiStatus />
-    </main>
+      <div style={{ marginTop: 12 }}><Note tone="bad">{error}</Note></div>
+    </Page>
   )
 }
