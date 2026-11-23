@@ -11,6 +11,9 @@ GUARD_CHECKS = ("empty", "too_long", "pii_leak", "unknown_token", "bad_citation"
                 "wrong_language")
 
 
+from shared.tracing import current_trace_id
+
+
 def _num(x, nd=3):
     try:
         return round(float(x), nd)
@@ -89,4 +92,8 @@ def record(state: dict, outcome: str) -> dict:
                   "passed": [k for k in GUARD_CHECKS if k not in problems],
                   "replaced_model_draft": g.get("replaced") or None},
         "steps": list(state.get("steps") or []),
+        "timings_ms": dict(state.get("timings") or {}),
+        "trace_id": current_trace_id(),
+        "tier": (state.get("tenant") or {}).get("tier"),
+        "as_of": src.get("as_of"),
     }

@@ -217,27 +217,59 @@ class PgAgentStore(PgTicketStore):
         return {"tickets": tickets, "incidents": incidents, "reviews": reviews, "library_size": library}
 
     # ---- phase G: support-head console --------------------------------------------------------
-    def console_rows(self, days: int = 7) -> list[dict]:
+    def console_rows(self, days: int = 7, limit: int = 5000) -> list[dict]:
         """Live tickets with their decision record and the latest reply-review outcome (masked only)."""
         with self._conn() as conn:
             rows = conn.execute(
                 """SELECT t.id::text, coalesce(t.ticket_ref, left(t.id::text, 8)), t.created_at, t.tenant_id,
                           t.language, t.team, t.route, t.route_rule, t.answer_tier, t.agent_status, t.classification,
                           t.decision, t.translation IS NOT NULL, t.feedback, left(coalesce(t.masked_body, ''), 200),
-                          r.outcome, extract(epoch FROM (r.decided_at - r.created_at)) / 60
+                          r.outcome, extract(epoch FROM (r.decided_at - r.created_at)) / 60,
+                          extract(epoch FROM (sr.first_at - t.created_at)), coalesce(cl.cost, 0), tn.tier
                    FROM tickets t
+                   LEFT JOIN tenants tn ON tn.tenant_id = t.tenant_id
                    LEFT JOIN LATERAL (SELECT outcome, decided_at, created_at FROM review_tasks
                                       WHERE ticket_id = t.id AND kind = 'reply'
                                       ORDER BY created_at DESC LIMIT 1) r ON true
+                   LEFT JOIN LATERAL (SELECT min(sent_at) AS first_at FROM sent_replies
+                                      WHERE ticket_id = t.id) sr ON true
+                   LEFT JOIN LATERAL (SELECT sum(cost_usd) AS cost FROM cost_ledger
+                                      WHERE ticket_id = t.id) cl ON true
                    WHERE t.origin = 'live' AND t.created_at >= now() - make_interval(days => %s)
-                   ORDER BY t.created_at DESC LIMIT 5000""", (days,)).fetchall()
+                   ORDER BY t.created_at DESC LIMIT %s""", (days, limit)).fetchall()
         keys = ("id", "ref", "created_at", "tenant_id", "language", "team", "route", "route_rule", "answer_tier",
                 "agent_status", "classification", "decision", "translation", "feedback", "masked_body",
-                "review_outcome", "review_minutes")
+                "review_outcome", "review_minutes", "first_reply_seconds", "cost_usd", "tier")
         out = [dict(zip(keys, r, strict=True)) for r in rows]
         for t in out:
-            t["review_minutes"] = float(t["review_minutes"]) if t["review_minutes"] is not None else None
+            for k in ("review_minutes", "first_reply_seconds", "cost_usd"):
+                t[k] = float(t[k]) if t[k] is not None else None
         return out
+
+    def q3_baseline(self) -> dict:
+        """What the desk does today (the client's Q3 export): the bar the agent is compared with."""
+        with self._conn() as conn:
+            r = conn.execute(
+                """SELECT count(*),
+                          percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM (first_response_at - created_at)) / 3600)
+                              FILTER (WHERE first_response_at IS NOT NULL),
+                          avg((initial_team IS DISTINCT FROM team)::int) FILTER (WHERE initial_team IS NOT NULL AND team IS NOT NULL)
+                   FROM tickets WHERE origin = 'export'""").fetchone()
+            csat = conn.execute("SELECT avg(score) FROM csat_responses").fetchone()[0]
+        return {"tickets": r[0], "median_first_response_hours": round(float(r[1]), 1) if r[1] is not None else None,
+                "wrong_category_rate": round(float(r[2]), 3) if r[2] is not None else None,
+                "csat_avg": round(float(csat), 2) if csat is not None else None}
+
+    def model_usage(self, days: int = 7) -> list[dict]:
+        """Model calls by step, model and ladder rung (cost_ledger), for the engineering view."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT coalesce(purpose, '-'), coalesce(model_id, '-'), coalesce(rung, 0), count(*),
+                          coalesce(sum(tokens_in), 0), coalesce(sum(tokens_out), 0), coalesce(sum(cost_usd), 0)
+                   FROM cost_ledger WHERE ts >= now() - make_interval(days => %s)
+                   GROUP BY 1, 2, 3 ORDER BY 4 DESC LIMIT 50""", (days,)).fetchall()
+        return [{"purpose": r[0], "model": r[1], "rung": int(r[2]), "calls": int(r[3]), "tokens_in": int(r[4]),
+                 "tokens_out": int(r[5]), "cost_usd": round(float(r[6]), 4)} for r in rows]
 
     def model_cost(self, days: int = 7) -> float:
         with self._conn() as conn:
@@ -262,10 +294,13 @@ class PgAgentStore(PgTicketStore):
             t["replies"] = [{"version": v, "body": b, "sent_at": a} for v, b, a in conn.execute(
                 """SELECT draft_version, body_masked, sent_at FROM sent_replies WHERE ticket_id = %s
                    ORDER BY draft_version""", (ticket_id,)).fetchall()]
-            t["reviews"] = [dict(zip(("kind", "status", "outcome", "proposed_draft", "final_draft", "reason",
+            t["reviews"] = [dict(zip(("id", "kind", "status", "outcome", "proposed_draft", "final_draft", "reason",
                                       "reviewer", "created_at", "decided_at"), r, strict=True)) for r in conn.execute(
-                """SELECT kind, status, outcome, proposed_draft, draft, route_reason, assignee, created_at, decided_at
+                """SELECT id::text, kind, status, outcome, proposed_draft, draft, route_reason, assignee, created_at,
+                          decided_at
                    FROM review_tasks WHERE ticket_id = %s ORDER BY created_at""", (ticket_id,)).fetchall()]
+            t["cost_usd"] = float(conn.execute("SELECT coalesce(sum(cost_usd), 0) FROM cost_ledger WHERE ticket_id = %s",
+                                               (ticket_id,)).fetchone()[0])
         t["review_outcome"] = next((r["outcome"] for r in reversed(t["reviews"]) if r["kind"] == "reply"), None)
         return t
 
@@ -453,7 +488,7 @@ class MemoryAgentStore(MemoryTicketStore):
         return self.tenants.get(tenant_id)
 
     # phase G (memory): console
-    def console_rows(self, days=7):
+    def console_rows(self, days=7, limit=5000):
         out = []
         for tid, t in self.tickets.items():
             rv = [r for r in (self.reviews or {}).values() if r["ticket_id"] == tid and r.get("kind") == "reply"]
@@ -463,11 +498,19 @@ class MemoryAgentStore(MemoryTicketStore):
                         "agent_status": t.get("agent_status"), "classification": t.get("classification"),
                         "decision": t.get("decision"), "translation": bool(t.get("translation")),
                         "feedback": t.get("feedback"), "masked_body": (t.get("masked_body") or "")[:200],
-                        "review_outcome": rv[-1].get("outcome") if rv else None, "review_minutes": None})
+                        "review_outcome": rv[-1].get("outcome") if rv else None, "review_minutes": None,
+                        "first_reply_seconds": 1.0 if self.replies(tid) else None, "cost_usd": 0.0,
+                        "tier": (self.tenants.get(t["tenant_id"]) or {}).get("tier")})
         return out
+
+    def q3_baseline(self):
+        return {}
 
     def model_cost(self, days=7):
         return 0.0
+
+    def model_usage(self, days=7):
+        return []
 
     def console_ticket(self, ticket_id):
         t = self.tickets.get(ticket_id)
@@ -480,7 +523,8 @@ class MemoryAgentStore(MemoryTicketStore):
                "id": ticket_id, "ref": t.get("ticket_ref") or ticket_id[:8],
                "region": (self.tenants.get(t["tenant_id"]) or {}).get("region"),
                "replies": [{"version": r["draft_version"], "body": r["body"]} for r in self.replies(ticket_id)],
-               "reviews": [{"kind": r.get("kind"), "status": r["status"], "outcome": r.get("outcome"),
+               "cost_usd": 0.0,
+               "reviews": [{"id": r["id"], "kind": r.get("kind"), "status": r["status"], "outcome": r.get("outcome"),
                             "proposed_draft": r.get("proposed_draft"), "final_draft": r.get("draft"),
                             "reason": r.get("route_reason"), "reviewer": r.get("assignee")} for r in rv]}
         out["review_outcome"] = next((r["outcome"] for r in reversed(out["reviews"]) if r["kind"] == "reply"), None)

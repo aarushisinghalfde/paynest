@@ -114,7 +114,7 @@ export default function Chat() {
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, tickets])
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 760, margin: '0 auto' }}>
+    <main style={{ fontFamily: 'inherit', padding: 24, maxWidth: 760, margin: '0 auto' }}>
       <h1 style={{ marginBottom: 4 }}>Payce Support</h1>
       <p style={{ color: '#555', marginTop: 0 }}>
         Ask a payroll question. Answers come from approved Payce sources; statutory answers are checked by a specialist first.

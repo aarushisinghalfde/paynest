@@ -6,8 +6,8 @@ export default function ApiStatus() {
   useEffect(() => {
     fetch('/api/health')
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((body) => setStatus(`API ${body.status} (${body.aws_region})`))
+      .then((body) => setStatus(`● live · ${body.version || 'dev'} · ${body.aws_region}`))
       .catch((err) => setStatus(`API unreachable (${err})`))
   }, [])
-  return <p data-testid="api-status">{status}</p>
+  return <span data-testid="api-status" style={{ color: '#5f6f73' }}>{status}</span>
 }

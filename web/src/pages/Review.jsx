@@ -47,7 +47,7 @@ export default function Review() {
   }, [token])
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 900 }}>
+    <main style={{ fontFamily: 'inherit', padding: 24, maxWidth: 900 }}>
       <h1>Reviewer console</h1>
       <label>Reviewer or admin token <input type="password" value={token} onChange={(e) => setToken(e.target.value)} /></label>
       {msg && <p>{msg}</p>}

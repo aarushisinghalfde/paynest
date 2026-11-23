@@ -168,3 +168,27 @@ def test_named_reviewer_tokens_are_parsed_and_weak_ones_ignored(monkeypatch):
 
     monkeypatch.setattr(settings, "REVIEWER_TOKENS", " priya:aaaaaaaaaaaaaaaaaaaa , omar:short, :bbbbbbbbbbbbbbbbbbbb, x")
     assert settings.reviewers() == {"aaaaaaaaaaaaaaaaaaaa": "priya"}
+
+
+def test_impact_numbers_and_baseline():
+    store, ids = _mixed()
+    s = console.summarize(store.console_rows(), 0.01, {"median_first_response_hours": 9.4})
+    im = s["impact"]
+    assert im["statutory_sent_without_a_person"] == 0 and im["baseline"]["median_first_response_hours"] == 9.4
+    assert im["answers_backed_by_a_source"] == 1.0 and im["median_agent_ms"] is not None
+    t = store.console_ticket(ids[2])
+    assert set(t["decision"]["timings_ms"]) >= {"pii_gate", "classify", "draft", "output_guard"}
+
+
+def test_queue_pages_search_and_counts_cover_the_whole_window():
+    rows = [{"id": f"t{i}", "ref": f"PN-{i}", "created_at": f"2026-11-23T10:{i:02d}", "route": "reply", "agent_status": "replied",
+             "team": "Payroll" if i % 2 else "How-To", "masked_body": f"question {i}",
+             "decision": {"answer": {"tier": "fallback"}, "classification": {"confidence": i / 100}}} for i in range(60)]
+    p1 = console.page(rows, "resolved", limit=25)
+    assert p1["count"] == 60 and len(p1["tickets"]) == 25 and p1["counts"]["resolved"] == 60
+    p3 = console.page(rows, "resolved", limit=25, offset=50)
+    assert len(p3["tickets"]) == 10
+    assert console.page(rows, "all", q="question 7")["count"] == 1
+    low = console.page(rows, "all", sort="confidence", limit=1)["tickets"][0]
+    assert low["confidence"] == 0.0
+    assert console.page(rows, "all", team="Payroll")["count"] == 30

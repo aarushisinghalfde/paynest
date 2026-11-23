@@ -58,7 +58,7 @@ def _conf(t):
         return None
 
 
-def summarize(rows: list[dict], cost_usd: float = 0.0) -> dict:
+def summarize(rows: list[dict], cost_usd: float = 0.0, baseline: dict | None = None) -> dict:
     by = Counter(bucket(t) for t in rows)
     work = len(rows) - by["chat"]  # tickets that needed support work
     dec = [t.get("decision") or {} for t in rows]
@@ -90,7 +90,23 @@ def summarize(rows: list[dict], cost_usd: float = 0.0) -> dict:
     reviewed = [t for t in rows if t.get("review_outcome") in ("approved_as_is", "edited", "rejected")]
     minutes = [t["review_minutes"] for t in reviewed if t.get("review_minutes") is not None]
     confs = [c for c in (_conf(t) for t in rows if bucket(t) != "chat") if c is not None]
+    answered = [t for t in rows if bucket(t) in ("resolved", "approved")]
+    backed = [t for t in answered if ((t.get("decision") or {}).get("answer") or {}).get("citations")]
+    first = [t["first_reply_seconds"] for t in rows if t.get("first_reply_seconds") is not None and bucket(t) == "resolved"]
+    agent_ms = [sum((t.get("decision") or {}).get("timings_ms", {}).values()) for t in rows
+                if (t.get("decision") or {}).get("timings_ms")]
+    costs = [t.get("cost_usd") or 0.0 for t in rows]
+    impact = {
+        "median_seconds_to_answer": round(median(first), 1) if first else None,
+        "median_agent_ms": round(median(agent_ms)) if agent_ms else None,
+        "cost_per_support_ticket": round(sum(costs) / work, 5) if work else None,
+        "answers_backed_by_a_source": round(len(backed) / len(answered), 3) if answered else None,
+        "out_of_date_rule_stopped": failed["superseded_source"],
+        "statutory_sent_without_a_person": sum(1 for t in rows if t.get("team") == "Statutory" and bucket(t) == "resolved"),
+        "baseline": baseline or {},
+    }
     return {
+        "impact": impact,
         "tickets": len(rows),
         "support_tickets": work,
         "buckets": [{"key": b, "label": LABEL[b], "n": by[b]} for b in BUCKETS],
@@ -132,7 +148,9 @@ def queue_rows(rows: list[dict], view: str, language: str | None = None, team: s
         if team and t.get("team") != team:
             continue
         d = t.get("decision") or {}
-        out.append({"id": t["id"], "ref": t.get("ref"), "created_at": str(t.get("created_at") or "")[:16],
+        out.append({"id": t["id"], "ref": t.get("ref"), "tier": t.get("tier"),
+                    "priority": bool(((t.get("decision") or {}).get("classification") or {}).get("priority_signal")),
+                    "seconds_to_answer": t.get("first_reply_seconds"), "cost_usd": t.get("cost_usd"), "created_at": str(t.get("created_at") or "")[:16],
                     "tenant_id": t.get("tenant_id"), "language": t.get("language"), "team": t.get("team"),
                     "confidence": _conf(t), "bucket": b, "route": t.get("route"), "rule": t.get("route_rule"),
                     "answered_by": (d.get("answer") or {}).get("tier") or t.get("answer_tier"),
@@ -140,3 +158,88 @@ def queue_rows(rows: list[dict], view: str, language: str | None = None, team: s
                     "has_translation": bool(t.get("translation")),
                     "preview": (t.get("masked_body") or "")[:140]})
     return out
+
+
+ROW_CAP = 5000  # rows read per window; above it the console says the window is truncated
+SORTS = {
+    "newest": (lambda t: str(t.get("created_at") or ""), True),
+    "priority": (lambda t: (bool(t.get("priority")), t.get("tier") == "Enterprise", str(t.get("created_at") or "")), True),
+    "confidence": (lambda t: t["confidence"] if t.get("confidence") is not None else 2.0, False),
+    "slowest": (lambda t: t["seconds_to_answer"] if t.get("seconds_to_answer") is not None else 1e12, True),
+    "cost": (lambda t: t.get("cost_usd") or 0.0, True),
+}
+
+
+def page(rows: list[dict], view: str = "all", q: str | None = None, sort: str = "newest", limit: int = 50,
+         offset: int = 0, language: str | None = None, team: str | None = None) -> dict:
+    """One page of the queue, filtered and sorted on the server, with counts per outcome for the chips.
+    Counts cover the whole window (search and language/team filters applied), not just the page."""
+    base = queue_rows(rows, "all", language, team)
+    if q:
+        needle = q.lower()
+        base = [t for t in base if needle in f"{t.get('preview')} {t.get('ref')} {t.get('team')} {t.get('tenant_id')}".lower()]
+    counts = Counter(t["bucket"] for t in base)
+    chosen = base if view == "all" else [t for t in base if t["bucket"] == view]
+    key, reverse = SORTS.get(sort, SORTS["newest"])
+    chosen = sorted(chosen, key=key, reverse=reverse)
+    return {"view": view, "count": len(chosen), "counts": {"all": len(base), **{b: counts[b] for b in BUCKETS}},
+            "offset": offset, "limit": limit, "tickets": chosen[offset: offset + limit],
+            "truncated": len(rows) >= ROW_CAP}
+
+
+# ---------------------------------------------------------------- engineering view (FDE, admin only)
+PIPELINE = ("pii_gate", "normalise", "resolve_tenant", "classify", "dedupe", "route", "draft", "output_guard", "send")
+
+
+def _q(xs: list[float], q: float):
+    if not xs:
+        return None
+    xs = sorted(xs)
+    return round(xs[min(len(xs) - 1, int(q * len(xs)))], 1)
+
+
+def engineering(rows: list[dict], usage: list[dict] | None = None, slow_n: int = 10) -> dict:
+    """Where the time goes per graph node, what failed, what the models cost, and a trace id per ticket.
+    Built from the same decision records as the support view: ids, timings and labels, never ticket text."""
+    work = [t for t in rows if (t.get("decision") or {}).get("timings_ms")]
+    per = {n: [] for n in PIPELINE}
+    totals = []
+    for t in work:
+        tm = t["decision"]["timings_ms"]
+        for n, ms in tm.items():
+            per.setdefault(n, []).append(float(ms))
+        totals.append((sum(float(v) for v in tm.values()), t))
+    nodes = [{"node": n, "n": len(v), "p50": _q(v, .5), "p95": _q(v, .95), "max": max(v) if v else None,
+              "share": round(sum(v) / max(sum(x for x, _ in totals), 1e-9), 3)} for n, v in per.items() if v]
+    ends = [x for x, _ in totals]
+
+    def brief(t, ms=None):
+        d = t.get("decision") or {}
+        return {"id": t["id"], "ref": t.get("ref"), "route": t.get("route"), "status": t.get("agent_status"),
+                "tier": (d.get("answer") or {}).get("tier"), "ms": round(ms, 1) if ms is not None else None,
+                "trace_id": d.get("trace_id"), "slowest_node": max((d.get("timings_ms") or {"-": 0}).items(), key=lambda kv: kv[1])[0]}
+
+    dec = [t.get("decision") or {} for t in rows]
+    guard_fail = Counter(p for d in dec for p in (d.get("guard") or {}).get("failed") or [])
+    failed = [t for t in rows if t.get("agent_status") == "failed"]
+    first = [t["first_reply_seconds"] for t in rows if t.get("first_reply_seconds") is not None]
+    u = usage or []
+    return {
+        "tickets": len(rows), "with_timings": len(work),
+        "traced": sum(1 for d in dec if d.get("trace_id")),
+        "end_to_end_ms": {"p50": _q(ends, .5), "p95": _q(ends, .95), "max": round(max(ends), 1) if ends else None},
+        "first_reply_s": {"p50": _q(first, .5), "p95": _q(first, .95)},
+        "nodes": nodes,
+        "slowest": [brief(t, ms) for ms, t in sorted(totals, key=lambda x: -x[0])[:slow_n]],
+        "failed": {"n": len(failed), "rows": [brief(t) for t in failed[:slow_n]]},
+        "guard": {"blocked": sum(1 for d in dec if (d.get("guard") or {}).get("failed")),
+                  "replaced": sum(1 for d in dec if (d.get("guard") or {}).get("replaced_model_draft")),
+                  "by_check": [{"key": k, "n": n} for k, n in guard_fail.most_common()]},
+        "classifier_model_rate": round(sum(1 for d in dec if (d.get("classification") or {}).get("model_called")) / max(len(dec), 1), 3),
+        "injection": sum(1 for d in dec if (d.get("classification") or {}).get("injection")),
+        "fallback": sum(1 for d in dec if (d.get("answer") or {}).get("tier") == "fallback"),
+        "models": u,
+        "model_calls": sum(r.get("calls", 0) for r in u),
+        "model_cost_usd": round(sum(r.get("cost_usd", 0) for r in u), 4),
+        "escalations": sum(r.get("calls", 0) for r in u if (r.get("rung") or 0) > 0),
+    }

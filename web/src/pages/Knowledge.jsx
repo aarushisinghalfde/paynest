@@ -51,7 +51,7 @@ export default function Knowledge() {
   const cell = { padding: '6px 8px', borderBottom: '1px solid #edf2f1', textAlign: 'left', verticalAlign: 'top' }
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 980, margin: '0 auto', color: INK }}>
+    <main style={{ fontFamily: 'inherit', padding: 24, maxWidth: 980, margin: '0 auto', color: INK }}>
       <h1 style={{ marginBottom: 4 }}>Knowledge import</h1>
       <p style={{ color: MUTED, marginTop: 0 }}>
         Articles and approved answers go into the database the agent answers How-To questions from.

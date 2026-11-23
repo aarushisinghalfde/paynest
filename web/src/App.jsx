@@ -4,24 +4,30 @@ import Dashboard from './pages/Dashboard.jsx'
 import Knowledge from './pages/Knowledge.jsx'
 import ApiStatus from './ApiStatus.jsx'
 
-// Two windows only, as the build plan asks: /chat (customer) and /review (reviewer).
-// Plain path matching keeps the skeleton free of a router dependency.
+// The control room is the landing page; customer chat, review and knowledge import sit in one top bar.
+// Plain path matching keeps the app free of a router dependency.
+const PAGES = [['/', 'Control room'], ['/chat', 'Customer chat'], ['/review', 'Review'], ['/knowledge', 'Knowledge']]
+
+function Nav({ path }) {
+  const active = (p) => (p === '/' ? path === '/' || path.startsWith('/dashboard') : path.startsWith(p))
+  return (
+    <nav style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 24px', borderBottom: '1px solid #d6e2df',
+      fontFamily: 'inherit', background: '#fff', position: 'sticky', top: 0, zIndex: 5 }}>
+      <b style={{ marginRight: 16, color: '#16262E' }}>Payce Support Assist</b>
+      {PAGES.map(([p, label]) => (
+        <a key={p} href={p} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 14, textDecoration: 'none',
+          color: active(p) ? '#fff' : '#16262E', background: active(p) ? '#16262E' : 'transparent' }}>{label}</a>
+      ))}
+      <span style={{ marginLeft: 'auto', fontSize: 12 }}><ApiStatus /></span>
+    </nav>
+  )
+}
+
 export default function App() {
   const path = window.location.pathname
-  if (path.startsWith('/chat')) return <Chat />
-  if (path.startsWith('/review')) return <Review />
-  if (path.startsWith('/dashboard')) return <Dashboard />
-  if (path.startsWith('/knowledge')) return <Knowledge />
-  return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24 }}>
-      <h1>Payce Support Assist</h1>
-      <ul>
-        <li><a href="/chat">Customer chat</a></li>
-        <li><a href="/review">Reviewer console</a></li>
-        <li><a href="/dashboard">Support console (lead)</a></li>
-        <li><a href="/knowledge">Knowledge import</a></li>
-      </ul>
-      <ApiStatus />
-    </main>
-  )
+  let page = <Dashboard />
+  if (path.startsWith('/chat')) page = <Chat />
+  else if (path.startsWith('/review')) page = <Review />
+  else if (path.startsWith('/knowledge')) page = <Knowledge />
+  return (<><Nav path={path} />{page}</>)
 }

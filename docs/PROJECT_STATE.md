@@ -38,7 +38,7 @@ The one status file. Updated 23 Nov 2026. Plan history: [plan_v2.md](plan_v2.md)
 | Human review, approve/edit/reject | Working (`/review`; named reviewer tokens; "English + why" shows the translation, confidence, rule and sources) |
 | Response delivery | Working (chat) |
 | Audit tracking | Working: decision record per ticket, review outcome, sent replies, cost ledger, vault reveal log |
-| Support-lead console (outcomes, confidence, answer path, translation) | Working, live in v0.9.0 |
+| Support control room (`/dashboard`) | Overview: verdict line, outcome cards against the Q3 desk baseline, ticket flow strip, How-To answer path, people-in-the-loop, confidence vs outcome, 12 checks. Tickets: queue with search, outcome chips and 5 sorts beside a decision trail (step timings, sources behind citations, same question on another date, approve/edit/reject in place, English), plus live demo buttons. Ships in v0.9.3 |
 | Traces (X-Ray) | Built; the collector is on the new server; `check_traces.py` not passed yet |
 | AgentCore model steps | Built; stack not applied |
 | Bedrock models | Blocked (account hold) |

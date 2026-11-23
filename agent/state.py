@@ -48,6 +48,7 @@ class TicketState(TypedDict, total=False):
     draft: str | None
     draft_version: int
     draft_mode: str  # library | cache | model | fallback | template
+    timings: dict  # node -> ms (shared/tracing.traced), shown as "how this was decided"
     fallback_draft: dict | None  # How-To: the no-model draft, used if the model's draft fails the guard
     howto: bool  # answered by the How-To agent (library -> cache -> RAG)
     learn_kb: list[str]  # How-To answered with a guide only: ask support to write the steps once

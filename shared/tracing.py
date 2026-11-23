@@ -64,6 +64,20 @@ def span(name: str, **attrs):
         yield s
 
 
+def current_trace_id() -> str | None:
+    """The active trace as X-Ray shows it (1-xxxxxxxx-yyyy...), so the console can link an FDE to it."""
+    try:
+        from opentelemetry import trace
+
+        ctx = trace.get_current_span().get_span_context()
+        if not ctx.is_valid:
+            return None
+        h = f"{ctx.trace_id:032x}"
+        return f"1-{h[:8]}-{h[8:]}"
+    except Exception:  # noqa: BLE001 - tracing off or not installed
+        return None
+
+
 def traced(node: str):
     def wrap(fn):
         @functools.wraps(fn)
@@ -81,6 +95,8 @@ def traced(node: str):
                     s.set_attribute("route", str(out.get("route") or state.get("route") or ""))
                     s.set_attribute("ms", ms)
                 log_event(log, "node_done", node=node, ticket_id=ticket, ms=ms)
+                if isinstance(out, dict) and isinstance(state, dict):  # per-step timings for the console
+                    out = {**out, "timings": {**(state.get("timings") or {}), node: ms}}
                 return out
 
         return inner

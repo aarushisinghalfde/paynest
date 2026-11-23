@@ -64,3 +64,16 @@ def test_named_reviewer_decisions_are_attributed_from_the_token(console, monkeyp
     assert r.status_code == 200
     assert store.reviews[task["id"]]["assignee"] == "priya"
     assert client.post("/knowledge", json={"articles": []}, headers=h).status_code == 401  # reviewers cannot import
+
+
+def test_compare_a_statutory_answer_on_another_date(console, monkeypatch):
+    store, ids = console
+    from tests.test_drafting import RULES
+
+    monkeypatch.setattr(store, "rules", RULES, raising=False)
+    h = {"X-Admin-Token": "lead-secret"}
+    r = client.get(f"/console/tickets/{ids[2]}/compare?date=2026-07-15", headers=h)
+    assert r.status_code == 200
+    assert client.get(f"/console/tickets/{ids[2]}/compare?date=not-a-date", headers=h).status_code == 422
+    t = client.get(f"/console/tickets/{ids[2]}", headers=h).json()
+    assert t["role"] == "lead" and t["open_task"]

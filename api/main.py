@@ -219,26 +219,98 @@ def console_summary(days: int = 7, x_admin_token: str | None = Header(default=No
     from agent import console
 
     store = get_store()
-    return {**console.summarize(store.console_rows(days), store.model_cost(days)), "days": days, "role": role}
+    global _baseline
+    if _baseline is None:  # the Q3 export does not change while the app runs
+        try:
+            _baseline = store.q3_baseline()
+        except Exception:  # noqa: BLE001 - a missing export must not break the console
+            _baseline = {}
+    rows = store.console_rows(days)
+    return {**console.summarize(rows, store.model_cost(days), _baseline), "days": days, "role": role,
+            "truncated": len(rows) >= console.ROW_CAP}
+
+
+_baseline = None
+
+
+@app.get("/console/whoami")
+def console_whoami(x_admin_token: str | None = Header(default=None)) -> dict:
+    """Which console the token opens: lead (client), reviewer, or admin (FDE: adds the Engineering tab)."""
+    return {"role": _reader(x_admin_token)}
+
+
+@app.get("/console/engineering")
+def console_engineering(days: int = 7, x_admin_token: str | None = Header(default=None)) -> dict:
+    """FDE view: per-node latency, failures, guard blocks, model usage and a trace id per ticket. Admin only."""
+    _admin(x_admin_token)
+    if not 1 <= days <= 90:
+        raise HTTPException(422, "days 1-90")
+    from agent import console
+
+    store = get_store()
+    try:
+        usage = store.model_usage(days)
+    except Exception:  # noqa: BLE001 - the ledger is optional for this view
+        usage = []
+    return {**console.engineering(store.console_rows(days), usage), "days": days,
+            "runtime": {"version": os.environ.get("APP_VERSION", "dev"), "region": settings.REGION,
+                        "aws_region": settings.AWS_REGION, "model_provider": os.environ.get("MODEL_PROVIDER") or "config",
+                        "tracing": bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))}}
+
+
+@app.get("/console/tickets/{ticket_id}/compare")
+def console_compare(ticket_id: str, date: str, x_admin_token: str | None = Header(default=None)) -> dict:
+    """The same statutory question answered for another date: which rule and value applied then.
+    Rules are data with effective dates (statutory_rules), so this is a lookup, not a model call."""
+    _reader(x_admin_token)
+    import datetime as _dt
+
+    from agent import tools
+
+    try:
+        uuid.UUID(ticket_id)
+        when = _dt.date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(422, "ticket id and date (YYYY-MM-DD) required") from None
+    store = get_store()
+    t = store.console_ticket(ticket_id)
+    if t is None:
+        raise HTTPException(404, "ticket not found")
+    _, rules = store.knowledge()
+    asked = ((t.get("decision") or {}).get("answer") or {}).get("as_of")
+    topics = tools.plan(t.get("masked_body") or "", t.get("region"))["rates"]
+    rows = []
+    for region, topic in topics:
+        then = tools.get_rate(rules, region, topic, when)
+        now = tools.get_rate(rules, region, topic, _dt.date.fromisoformat(asked)) if asked else None
+        rows.append({"topic": topic, "region": region,
+                     "asked_for": {"date": asked, "value": (now or {}).get("value"), "rule": (now or {}).get("source")},
+                     "compared": {"date": date, "value": (then or {}).get("value"), "rule": (then or {}).get("source")},
+                     "differs": bool(now and then and now.get("value") != then.get("value"))})
+    return {"ticket_id": ticket_id, "topics": rows,
+            "note": None if rows else "no statutory rate in this question"}
 
 
 @app.get("/console/tickets")
 def console_tickets(view: str = "all", days: int = 7, language: str | None = None, team: str | None = None,
+                    q: str | None = None, sort: str = "newest", limit: int = 50, offset: int = 0,
                     x_admin_token: str | None = Header(default=None)) -> dict:
+    """The queue, one page at a time: filtered, searched and sorted on the server, with outcome counts."""
     _reader(x_admin_token)
-    if view not in VIEWS or not 1 <= days <= 90:
-        raise HTTPException(422, f"view one of {VIEWS}; days 1-90")
     from agent import console
 
-    rows = console.queue_rows(get_store().console_rows(days), view, language, team)
-    return {"view": view, "count": len(rows), "tickets": rows[:500]}
+    if view not in VIEWS or not 1 <= days <= 90 or not 1 <= limit <= 1000 or offset < 0 or sort not in console.SORTS:
+        raise HTTPException(422, f"view one of {VIEWS}; days 1-90; limit 1-1000; sort one of {sorted(console.SORTS)}")
+    if q is not None and len(q) > 100:
+        raise HTTPException(422, "search text up to 100 characters")
+    return console.page(get_store().console_rows(days), view, q, sort, limit, offset, language, team)
 
 
 @app.get("/console/tickets/{ticket_id}")
 def console_ticket(ticket_id: str, translate: bool = True, x_admin_token: str | None = Header(default=None)) -> dict:
     """One ticket's timeline: masked question, decision record, replies, reviews, and an English
     machine translation for Arabic/Hindi/Hinglish (made once, on first open, then stored)."""
-    _reader(x_admin_token)
+    role = _reader(x_admin_token)
     try:
         uuid.UUID(ticket_id)
     except ValueError:
@@ -258,6 +330,9 @@ def console_ticket(ticket_id: str, translate: bool = True, x_admin_token: str | 
             store.save_progress(ticket_id, translation=t["translation"])
     t["bucket"] = console.bucket(t)
     t["customer_saw"] = [customer_view(r["body"]) for r in t["replies"]]
+    t["role"] = role  # the page shows approve/reject only to admins and named reviewers
+    t["aws_region"] = settings.AWS_REGION  # admins get a link to the ticket's X-Ray trace
+    t["open_task"] = next((r["id"] for r in t["reviews"] if r["status"] == "open"), None)
     return t
 
 
