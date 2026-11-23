@@ -55,10 +55,32 @@ $env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"   # Arabic/Hindi replies 
 
 # 2. Optional restart so the server pulls the newest image.
 if ($Restart) {
-  Say "Restarting the app on $InstanceId ..."
-  aws ssm send-command --region $Region --instance-ids $InstanceId --document-name AWS-RunShellScript `
-    --parameters "commands=['systemctl restart paynest']" --query "Command.CommandId" --output text *>&1 | Tee-Object -FilePath $Log -Append
-  Start-Sleep -Seconds 60
+  # Pull and recreate the containers directly. "systemctl restart" alone could leave the old
+  # container running: the containers restart themselves (unless-stopped), so when the unit was
+  # already failed, a failing pull went unnoticed and the old version kept answering.
+  Say "Pulling the new images and restarting the app on $InstanceId ..."
+  $script = 'set -e; cd /opt/paynest; set -a; . ./settings; set +a; ./fetch-env.sh; ' +
+    'aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"; ' +
+    'docker compose pull; docker compose up -d --remove-orphans; systemctl reset-failed paynest || true; ' +
+    'docker compose images; docker compose ps'
+  $paramFile = Join-Path $env:TEMP "paynest-restart.json"
+  [IO.File]::WriteAllText($paramFile, (@{ commands = @($script) } | ConvertTo-Json -Compress))
+  $cmdId = aws ssm send-command --region $Region --instance-ids $InstanceId --document-name AWS-RunShellScript `
+    --parameters "file://$paramFile" --query "Command.CommandId" --output text
+  $ErrorActionPreference = "Continue"
+  $until = (Get-Date).AddMinutes(15)
+  do {  # the pull can take a few minutes; "aws ssm wait" gives up after ~100 s
+    Start-Sleep -Seconds 10
+    $inv = aws ssm get-command-invocation --region $Region --command-id $cmdId --instance-id $InstanceId --output json 2>$null | ConvertFrom-Json
+  } while ((-not $inv -or $inv.Status -in @("Pending", "InProgress", "Delayed")) -and (Get-Date) -lt $until)
+  $ErrorActionPreference = "Stop"
+  $inv.StandardOutputContent | Tee-Object -FilePath $Log -Append
+  if ($inv.Status -ne "Success") {
+    Say "FAIL: restart on the server ended '$($inv.Status)':"
+    $inv.StandardErrorContent | Tee-Object -FilePath $Log -Append
+    exit 1
+  }
+  Start-Sleep -Seconds 20
 }
 
 # The few packages the check scripts and the evals need on the laptop (the app's own list is
