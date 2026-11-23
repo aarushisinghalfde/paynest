@@ -113,7 +113,7 @@ sequenceDiagram
     else guide clearly fits
         W->>W: draft from the guide's steps (model or fixed wording)
     else no guide fits
-        W->>W: hand-off reply; knowledge task for support
+        W->>W: hand-off reply, knowledge task for support
     end
     W->>W: output guard (15 checks), send gate
     W->>P: insert reply, checkpoint
